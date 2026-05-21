@@ -65,20 +65,40 @@ def write_table(df: pd.DataFrame, path: str | Path) -> None:
             con.register("df", df)
             if _duckdb_table_exists(con, table):
                 key = None
-                if "handle" in df.columns:
+                if "id" in df.columns:
+                    key = "id"
+                elif "item_id" in df.columns:
+                    key = "item_id"
+                elif "handle" in df.columns:
                     key = "handle"
                 elif "item_url" in df.columns:
                     key = "item_url"
                 if key:
                     con.execute(
-                        f"insert into {table} select df.* from df "
-                        f"left join {table} t on df.{key} = t.{key} "
+                        f"insert into {table} (id, date_accepted, title, authors) "
+                        f"select cast(df.id as integer), "
+                        f"try_strptime(df.date_accepted, '%d.%m.%Y')::date, "
+                        f"cast(df.title as varchar), cast(df.authors as varchar) "
+                        f"from df left join {table} t on df.{key} = t.{key} "
                         f"where t.{key} is null"
                     )
                 else:
-                    con.execute(f"insert into {table} select * from df")
+                    con.execute(
+                        f"insert into {table} (id, date_accepted, title, authors) "
+                        f"select cast(df.id as integer), "
+                        f"try_strptime(df.date_accepted, '%d.%m.%Y')::date, "
+                        f"cast(df.title as varchar), cast(df.authors as varchar) "
+                        f"from df"
+                    )
             else:
-                con.execute(f"create table {table} as select * from df")
+                con.execute(
+                    f"create table {table} as "
+                    f"select cast(df.id as integer) as id, "
+                    f"try_strptime(df.date_accepted, '%d.%m.%Y')::date as date_accepted, "
+                    f"cast(df.title as varchar) as title, "
+                    f"cast(df.authors as varchar) as authors "
+                    f"from df"
+                )
         return
     if path.suffix.lower() == ".csv":
         df.to_csv(path, index=False)

@@ -88,7 +88,14 @@ def harvest_simple_search(
             if row
         ]
         for row in page_rows:
-            row["source_url"] = target_url
+            item_url = row.get("item_url")
+            if not item_url:
+                continue
+            if "/handle/" in item_url:
+                item_id = item_url.split("/")[-1]
+                if item_id.isdigit():
+                    row["id"] = int(item_id)
+            row.pop("item_url", None)
         rows.extend(page_rows)
         if not paginate:
             break
