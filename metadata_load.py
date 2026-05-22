@@ -577,11 +577,11 @@ def load_metadata(
             metadata = metadata_from_html(html)
             breadcrumbs = extract_breadcrumbs(html)
             university = breadcrumbs[0] if len(breadcrumbs) >= 1 else None
-            faculty = breadcrumbs[1] if len(breadcrumbs) >= 2 else None
+            school = breadcrumbs[1] if len(breadcrumbs) >= 2 else None
             study_category = breadcrumbs[2] if len(breadcrumbs) >= 3 else None
             thesis_type_label = breadcrumbs[3] if len(breadcrumbs) >= 4 else None
             institution = university
-            school = faculty
+            faculty = None
 
             title_is, title_en = pick_titles_from_metadata(metadata)
             abstract_is = get_first(metadata, "DCTERMS.abstract", "Útdráttur")
