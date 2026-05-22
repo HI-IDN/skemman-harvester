@@ -5,6 +5,7 @@ from typing import Any
 from urllib.parse import urlencode
 
 import pandas as pd
+from tqdm import tqdm
 
 from .parse import parse_next_page, parse_simple_search_rows
 from .utils import PoliteSession
@@ -80,32 +81,40 @@ def harvest_simple_search(
         raise ValueError("Either url or location must be provided.")
 
     rows: list[dict[str, Any]] = []
-    while target_url:
-        html = session.get_text(target_url, use_cache=False)
-        page_rows = [
-            _normalise_record(row)
-            for row in parse_simple_search_rows(html, base_url)
-            if row
-        ]
-        for row in page_rows:
-            item_url = row.get("item_url")
-            if not item_url:
+    desc_parts = ["simple-search"]
+    if location:
+        desc_parts.append(_normalize_location(location))
+    if year is not None:
+        desc_parts.append(str(year))
+    with tqdm(desc=" ".join(desc_parts), unit="page") as progress:
+        while target_url:
+            html = session.get_text(target_url, use_cache=False)
+            page_rows = [
+                _normalise_record(row)
+                for row in parse_simple_search_rows(html, base_url)
+                if row
+            ]
+            for row in page_rows:
+                item_url = row.get("item_url")
+                if not item_url:
+                    continue
+                if "/handle/" in item_url:
+                    item_id = item_url.split("/")[-1]
+                    if item_id.isdigit():
+                        row["id"] = int(item_id)
+                row.pop("item_url", None)
+            rows.extend(page_rows)
+            progress.update(1)
+            progress.set_postfix(records=len(rows), page_records=len(page_rows))
+            if not paginate:
+                break
+            next_url = parse_next_page(html, base_url)
+            if next_url:
+                target_url = next_url
                 continue
-            if "/handle/" in item_url:
-                item_id = item_url.split("/")[-1]
-                if item_id.isdigit():
-                    row["id"] = int(item_id)
-            row.pop("item_url", None)
-        rows.extend(page_rows)
-        if not paginate:
-            break
-        next_url = parse_next_page(html, base_url)
-        if next_url:
-            target_url = next_url
-            continue
-        if len(page_rows) < rpp:
-            break
-        start += rpp
-        target_url = build_simple_search_url(base_url, location or "", year, rpp, start=start)
+            if len(page_rows) < rpp:
+                break
+            start += rpp
+            target_url = build_simple_search_url(base_url, location or "", year, rpp, start=start)
 
     return pd.DataFrame(rows)
