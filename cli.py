@@ -6,54 +6,12 @@ import typer
 from rich.console import Console
 
 from .config import load_config
+from .metadata_load import load_metadata
 from .simple_search import harvest_simple_search
 from .storage import write_table
 
-app = typer.Typer(help="Skemman thesis scraper and analysis pipeline")
+app = typer.Typer(help="Skemman thesis metadata loader")
 console = Console()
-
-
-@app.command(name="harvest")
-def harvest_cmd(
-        config: Path = typer.Option(Path("config/collections.yaml"), "--config", "-c"),
-        output: Path = typer.Option(Path("data/processed/items.parquet"), "--output", "-o"),
-        limit: int | None = typer.Option(None, "--limit", help="Maximum item pages to harvest."),
-) -> None:
-    """TODO: implement item-page harvest workflow."""
-    raise typer.Exit("TODO: harvest is not implemented yet. Use simple-search for listing capture.")
-
-
-@app.command(name="extract-pdfs")
-def extract_pdfs(
-        input: Path = typer.Option(Path("data/processed/items.parquet"), "--input", "-i"),
-        output: Path = typer.Option(Path("data/processed/items_with_text.parquet"), "--output",
-                                    "-o"),
-        config: Path = typer.Option(Path("config/collections.yaml"), "--config", "-c"),
-        max_pages: int = typer.Option(8, "--max-pages"),
-) -> None:
-    """TODO: implement PDF text extraction workflow."""
-    raise typer.Exit(
-        "TODO: extract-pdfs is not implemented yet. Use simple-search for listing capture.")
-
-
-@app.command()
-def classify(
-        input: Path = typer.Option(Path("data/processed/items_with_text.parquet"), "--input", "-i"),
-        output: Path = typer.Option(Path("data/processed/classified.parquet"), "--output", "-o"),
-        config: Path = typer.Option(Path("config/collections.yaml"), "--config", "-c"),
-) -> None:
-    """TODO: implement classification workflow."""
-    raise typer.Exit(
-        "TODO: classify is not implemented yet. Use simple-search for listing capture.")
-
-
-@app.command()
-def export(
-        input: Path = typer.Option(Path("data/processed/classified.parquet"), "--input", "-i"),
-        csv: Path = typer.Option(Path("outputs/classified.csv"), "--csv"),
-) -> None:
-    """TODO: implement export workflow."""
-    raise typer.Exit("TODO: export is not implemented yet. Use simple-search for listing capture.")
 
 
 @app.command(name="simple-search")
@@ -66,7 +24,7 @@ def simple_search_cmd(
         output: Path = typer.Option(Path("data/processed/thesis.db"), "--output", "-o"),
         config: Path = typer.Option(Path("config/collections.yaml"), "--config", "-c"),
 ) -> None:
-    """Scrape simple-search listing rows (date/title/author/url) into DuckDB."""
+    """Scrape Skemman simple-search listing rows into DuckDB."""
     cfg = load_config(config)
     if not url and not location:
         raise typer.BadParameter("Provide either --url or --location.")
@@ -82,9 +40,30 @@ def simple_search_cmd(
         console.print("[yellow]No data found for the provided filters.[/yellow]")
         return
     write_table(df, output)
-    if not df.empty and "source_url" in df.columns:
+    if "source_url" in df.columns:
         console.print(f"[blue]Source URL: {df['source_url'].iloc[0]}[/blue]")
     console.print(f"[green]Wrote {len(df)} records to {output}[/green]")
+
+
+@app.command(name="metadata-load")
+def metadata_load_cmd(
+        db: Path = typer.Option(Path("data/processed/thesis.db"), "--db"),
+        ids: str | None = typer.Option(None, "--ids"),
+        urls: str | None = typer.Option(None, "--urls"),
+        out_html: Path = typer.Option(Path("data/raw/items"), "--out-html"),
+        user_agent: str = typer.Option("skemman-metadata-loader", "--user-agent"),
+        delay: float = typer.Option(2.0, "--delay"),
+) -> None:
+    """Fetch or reuse Skemman item HTML and load normalized metadata into DuckDB."""
+    loaded = load_metadata(
+        db=db,
+        ids=ids,
+        urls=urls,
+        out_html=out_html,
+        user_agent=user_agent,
+        delay=delay,
+    )
+    console.print(f"[green]Loaded metadata for {loaded} records.[/green]")
 
 
 if __name__ == "__main__":
