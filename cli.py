@@ -8,8 +8,9 @@ import typer
 from rich.console import Console
 
 from .config import load_config
-from .metadata_load import load_metadata
+from .metadata_load import clean_people_table, load_metadata
 from .simple_search import harvest_simple_search
+from .titlepage_load import load_titlepages
 
 app = typer.Typer(help="Skemman thesis metadata loader")
 console = Console()
@@ -94,6 +95,51 @@ def metadata_load_cmd(
         delay=delay,
     )
     console.print(f"[green]Loaded metadata for {loaded} records.[/green]")
+
+
+@app.command(name="titlepage-load")
+def titlepage_load_cmd(
+        db: Path = typer.Option(Path("data/processed/thesis.db"), "--db"),
+        limit: int | None = typer.Option(None, "--limit", help="Stop after N theses."),
+        ids: str | None = typer.Option(None, "--ids", help="Comma-separated thesis ids."),
+        degree_level: str = typer.Option("master", "--degree-level"),
+        text_dir: Path = typer.Option(Path("data/raw/pdf_text"), "--text-dir"),
+        pdf_dir: Path = typer.Option(Path("data/raw/pdfs"), "--pdf-dir"),
+        config: Path = typer.Option(Path("config/collections.yaml"), "--config", "-c"),
+        keep_pdf: bool = typer.Option(False, "--keep-pdf/--no-keep-pdf"),
+) -> None:
+    """Read faculty, credits and degree off thesis title pages into DuckDB.
+
+    Subject keywords are a guess; the title page is the authority. Extracted text
+    is cached per thesis, so a second run re-parses without refetching.
+    """
+    processed, with_faculty = load_titlepages(
+        db=db,
+        limit=limit,
+        ids=ids,
+        text_dir=text_dir,
+        pdf_dir=pdf_dir,
+        config=config,
+        keep_pdf=keep_pdf,
+        degree_level=degree_level,
+    )
+    if processed:
+        pct = 100.0 * with_faculty / processed
+        console.print(
+            f"[green]Parsed {processed} title pages, "
+            f"{with_faculty} with a stated faculty or deild ({pct:.0f}%).[/green]"
+        )
+    else:
+        console.print("[yellow]Nothing to do.[/yellow]")
+
+
+@app.command(name="clean-people")
+def clean_people_cmd(
+        db: Path = typer.Option(Path("data/processed/thesis.db"), "--db"),
+) -> None:
+    """Normalize people names and embedded birth/death years in DuckDB."""
+    changed = clean_people_table(db)
+    console.print(f"[green]Cleaned {changed} people records.[/green]")
 
 
 if __name__ == "__main__":
