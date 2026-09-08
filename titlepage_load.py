@@ -15,6 +15,7 @@ from pathlib import Path
 
 import duckdb
 import pypdf
+from tqdm import tqdm
 
 from .config import load_config
 from .utils import PoliteSession
@@ -180,11 +181,16 @@ def _ensure_text(
     try:
         text, n_pages = extract_text(pdf_path)
     except Exception:  # noqa: BLE001 - a broken PDF should not stop the run
-        text, n_pages = "", None
+        # Nothing is cached: a failed read is usually a truncated download, and
+        # caching it would skip the thesis silently on every later run.
+        if fetched_now and not keep_pdf:
+            pdf_path.unlink(missing_ok=True)
+        return None, None
 
+    # An empty text with a good page count means a scanned PDF. That is a real
+    # answer, so it is cached -- otherwise every run would fetch it again.
     text_dir.mkdir(parents=True, exist_ok=True)
-    marker = "" if n_pages is None else f"{PAGE_MARKER}{n_pages}\n"
-    text_path.write_text(marker + text, encoding="utf-8")
+    text_path.write_text(f"{PAGE_MARKER}{n_pages}\n{text}", encoding="utf-8")
 
     # The text is what we keep; the PDF can always be fetched again.
     if fetched_now and not keep_pdf:
@@ -272,20 +278,23 @@ def load_titlepages(
         rows = con.execute(sql, params).fetchall()
 
         processed = with_faculty = 0
-        for thesis_id, url in rows:
+        bar = tqdm(rows, desc="Reading title pages", unit="thesis")
+        for thesis_id, url in bar:
             try:
                 text, n_pages = _ensure_text(
                     thesis_id, url, text_dir, pdf_dir, session, keep_pdf
                 )
             except Exception:  # noqa: BLE001 - restricted or missing files are expected
                 continue
-            if not text:
+            if not text and n_pages is None:
                 continue
 
-            fields = parse_titlepage(text)
+            # A scanned PDF yields no text but still has a real page count, so the
+            # row is written with whatever could be read.
+            fields = parse_titlepage(text or "")
             fields["thesis_id"] = thesis_id
             fields["n_pages"] = n_pages
-            fields["text_chars"] = len(text)
+            fields["text_chars"] = len(text or "")
 
             columns = [
                 "thesis_id", "faculty", "school", "department", "deild", "svid",
@@ -301,6 +310,7 @@ def load_titlepages(
             processed += 1
             if fields.get("faculty") or fields.get("deild"):
                 with_faculty += 1
+            bar.set_postfix(parsed=processed, faculty=with_faculty)
 
         con.execute("checkpoint")
 
