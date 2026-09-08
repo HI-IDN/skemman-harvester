@@ -10,12 +10,19 @@ never fetched again, and re-parsing with better patterns costs nothing.
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 
 import duckdb
 import pypdf
 from tqdm import tqdm
+
+# pypdf narrates every font and xref oddity it meets. Thousands of theses means
+# thousands of lines of "Advanced encoding /SymbolSetEncoding not implemented
+# yet" scrolling over the progress bar, and none of it is actionable: the text
+# still extracts. Errors are still shown.
+logging.getLogger("pypdf").setLevel(logging.ERROR)
 
 from .config import load_config
 from .utils import PoliteSession
