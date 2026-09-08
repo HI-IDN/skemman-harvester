@@ -3,14 +3,16 @@ from __future__ import annotations
 import argparse
 import re
 from pathlib import Path
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 from urllib.parse import urljoin
 
-import duckdb
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 
 from skemman_scraper.utils import PoliteSession
+
+if TYPE_CHECKING:
+    import duckdb
 
 NOTE_KEYS = ["Athugasemdir", "Athugasemd", "Notes", "Note"]
 SPONSOR_KEYS = ["Styrktaraðili", "Sponsor"]
@@ -198,17 +200,21 @@ def normalise_degree(value: str | None) -> str | None:
 
 def parse_person_name(text: str) -> tuple[str, int | None, int | None]:
     cleaned = normalise_text(text) or ""
-    match = re.match(r"^(.*?)(?:\s+(\d{4})-(\d{4})?)?$", cleaned)
-    if not match:
-        return cleaned, None, None
-    name = match.group(1).strip()
-    year_born = int(match.group(2)) if match.group(2) else None
-    year_died = int(match.group(3)) if match.group(3) else None
-    return name, year_born, year_died
+    year_pattern = r"(?<!\d)((?:19|20)\d{2})(?:\s*[-–]\s*((?:19|20)\d{2})?)?(?!\d)"
+    match = re.search(year_pattern, cleaned)
+    year_born = int(match.group(1)) if match else None
+    year_died = int(match.group(2)) if match and match.group(2) else None
+
+    name = re.sub(year_pattern, " ", cleaned)
+    name = re.sub(r"\([^)]*\)", " ", name)
+    name = normalise_text(name)
+    if name:
+        name = name.strip(" ,;-")
+    return name or "", year_born, year_died
 
 
 def ensure_person(
-        con: duckdb.DuckDBPyConnection,
+        con: "duckdb.DuckDBPyConnection",
         name: str,
         year_born: int | None,
         year_died: int | None,
@@ -231,12 +237,71 @@ def ensure_person(
     return int(inserted[0])
 
 
+def clean_people_table(db: str | Path) -> int:
+    import duckdb
+
+    changed = 0
+    with duckdb.connect(db) as con:
+        rows = con.execute("select id, name, year_born, year_died from people").fetchall()
+        for person_id, raw_name, raw_year_born, raw_year_died in rows:
+            name, parsed_year_born, parsed_year_died = parse_person_name(str(raw_name or ""))
+            if not name:
+                continue
+            year_born = int(raw_year_born) if raw_year_born is not None else parsed_year_born
+            year_died = int(raw_year_died) if raw_year_died is not None else parsed_year_died
+            if (
+                    name == raw_name
+                    and year_born == raw_year_born
+                    and year_died == raw_year_died
+            ):
+                continue
+
+            existing = con.execute(
+                """
+                select id
+                from people
+                where id <> ?
+                  and name = ?
+                  and coalesce(year_born, -1) = coalesce(?, -1)
+                order by id
+                limit 1
+                """,
+                [person_id, name, year_born],
+            ).fetchone()
+            if existing:
+                target_id = int(existing[0])
+                con.execute(
+                    """
+                    update thesis_people
+                    set person_id = ?
+                    where person_id = ?
+                      and not exists (
+                          select 1
+                          from thesis_people existing_link
+                          where existing_link.thesis_id = thesis_people.thesis_id
+                            and existing_link.person_id = ?
+                            and existing_link.role = thesis_people.role
+                      )
+                    """,
+                    [target_id, person_id, target_id],
+                )
+                con.execute("delete from thesis_people where person_id = ?", [person_id])
+                con.execute("delete from people where id = ?", [person_id])
+            else:
+                con.execute(
+                    "update people set name = ?, year_born = ?, year_died = ? where id = ?",
+                    [name, year_born, year_died, person_id],
+                )
+            changed += 1
+    return changed
+
+
 def keyword_norm(value: str) -> str:
     return value.casefold().strip()
 
 
 def ensure_keyword(
-        con: duckdb.DuckDBPyConnection,
+        con: "duckdb.DuckDBPyConnection",
         keyword: str,
 ) -> int:
     norm = keyword_norm(keyword)
@@ -255,7 +320,7 @@ def ensure_keyword(
 
 
 def insert_people_links(
-        con: duckdb.DuckDBPyConnection,
+        con: "duckdb.DuckDBPyConnection",
         thesis_id: int,
         people: Iterable[tuple[str, int | None, int | None]],
         role: str,
@@ -283,7 +348,7 @@ def insert_people_links(
 
 
 def insert_keyword_links(
-        con: duckdb.DuckDBPyConnection,
+        con: "duckdb.DuckDBPyConnection",
         thesis_id: int,
         keywords: Iterable[str],
 ) -> None:
@@ -530,6 +595,8 @@ def load_metadata(
         user_agent: str = "skemman-metadata-loader",
         delay: float = 2.0,
 ) -> int:
+    import duckdb
+
     item_urls = resolve_urls(ids, urls)
 
     if not item_urls:

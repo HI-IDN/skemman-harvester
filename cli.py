@@ -9,6 +9,7 @@ from rich.console import Console
 
 from .config import load_config
 from .metadata_load import clean_people_table, load_metadata
+from .files_index import load_file_index
 from .simple_search import harvest_simple_search
 from .titlepage_load import load_titlepages
 
@@ -97,6 +98,21 @@ def metadata_load_cmd(
     console.print(f"[green]Loaded metadata for {loaded} records.[/green]")
 
 
+@app.command(name="files-index")
+def files_index_cmd(
+        db: Path = typer.Option(Path("data/processed/thesis.db"), "--db"),
+        items_dir: Path = typer.Option(Path("data/raw/items"), "--items-dir"),
+) -> None:
+    """Index each item's file table: name, size, access and type.
+
+    Reads the cached item HTML only, so it needs no network. Populates
+    thesis_file, which titlepage-load uses to skip closed files and to take the
+    small ones first.
+    """
+    theses, rows = load_file_index(db=db, items_dir=items_dir)
+    console.print(f"[green]Indexed {rows} files across {theses} theses.[/green]")
+
+
 @app.command(name="titlepage-load")
 def titlepage_load_cmd(
         db: Path = typer.Option(Path("data/processed/thesis.db"), "--db"),
@@ -107,13 +123,24 @@ def titlepage_load_cmd(
         pdf_dir: Path = typer.Option(Path("data/raw/pdfs"), "--pdf-dir"),
         config: Path = typer.Option(Path("config/collections.yaml"), "--config", "-c"),
         keep_pdf: bool = typer.Option(False, "--keep-pdf/--no-keep-pdf"),
+        log_path: Path = typer.Option(Path("logs/titlepage.log"), "--log"),
+        retry_failed: bool = typer.Option(
+            False, "--retry-failed", help="Also retry theses recorded as permanently closed."
+        ),
+        max_mb: float | None = typer.Option(
+            None, "--max-mb", help="Skip PDFs larger than this, per the item page."
+        ),
+        include_closed: bool = typer.Option(
+            False, "--include-closed", help="Also try files the item page marks closed."
+        ),
 ) -> None:
     """Read faculty, credits and degree off thesis title pages into DuckDB.
 
     Subject keywords are a guess; the title page is the authority. Extracted text
-    is cached per thesis, so a second run re-parses without refetching.
+    is cached per thesis, so a second run re-parses without refetching. Theses
+    that yield nothing are recorded in thesis_titlepage_failure and in the log.
     """
-    processed, with_faculty = load_titlepages(
+    processed, with_faculty, failed = load_titlepages(
         db=db,
         limit=limit,
         ids=ids,
@@ -122,6 +149,10 @@ def titlepage_load_cmd(
         config=config,
         keep_pdf=keep_pdf,
         degree_level=degree_level,
+        log_path=log_path,
+        retry_failed=retry_failed,
+        max_bytes=int(max_mb * 1024 * 1024) if max_mb else None,
+        include_closed=include_closed,
     )
     if processed:
         pct = 100.0 * with_faculty / processed
@@ -129,7 +160,12 @@ def titlepage_load_cmd(
             f"[green]Parsed {processed} title pages, "
             f"{with_faculty} with a stated faculty or deild ({pct:.0f}%).[/green]"
         )
-    else:
+    if failed:
+        console.print(
+            f"[yellow]{failed} produced nothing -- see {log_path} "
+            f"and thesis_titlepage_failure.[/yellow]"
+        )
+    if not processed and not failed:
         console.print("[yellow]Nothing to do.[/yellow]")
 
 

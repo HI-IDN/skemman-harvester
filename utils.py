@@ -54,18 +54,43 @@ class PoliteSession:
 
         return text
 
-    def download_binary(self, url: str, dest: Path) -> Path:
+    def download_binary(self, url: str, dest: Path, attempts: int = 2) -> Path:
+        """Download to `dest`, verifying the file arrived whole.
+
+        Skemman serves some large files slowly enough that the connection drops
+        part way. A truncated PDF still lands on disk and looks valid until a
+        reader chokes on it, so the length is checked against Content-Length and
+        a short read is retried rather than kept.
+        """
         dest.parent.mkdir(parents=True, exist_ok=True)
 
-        elapsed = time.time() - self._last_request
-        if elapsed < self.delay_seconds:
-            time.sleep(self.delay_seconds - elapsed)
+        last_error: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            elapsed = time.time() - self._last_request
+            if elapsed < self.delay_seconds:
+                time.sleep(self.delay_seconds - elapsed)
 
-        with self.session.get(url, timeout=self.timeout_seconds, stream=True) as resp:
-            self._last_request = time.time()
-            resp.raise_for_status()
-            with dest.open("wb") as f:
-                for chunk in resp.iter_content(chunk_size=1024 * 256):
-                    if chunk:
-                        f.write(chunk)
-        return dest
+            try:
+                with self.session.get(url, timeout=self.timeout_seconds, stream=True) as resp:
+                    self._last_request = time.time()
+                    resp.raise_for_status()
+                    expected = int(resp.headers.get("Content-Length") or 0)
+                    written = 0
+                    with dest.open("wb") as f:
+                        for chunk in resp.iter_content(chunk_size=1024 * 256):
+                            if chunk:
+                                written += f.write(chunk)
+                    self._last_request = time.time()
+
+                if expected and written != expected:
+                    raise OSError(
+                        f"truncated download: got {written} of {expected} bytes"
+                    )
+                return dest
+            except Exception as exc:  # noqa: BLE001 - retried below, re-raised if final
+                last_error = exc
+                dest.unlink(missing_ok=True)
+                if attempt < attempts:
+                    time.sleep(self.delay_seconds * attempt)
+
+        raise last_error if last_error else OSError("download failed")

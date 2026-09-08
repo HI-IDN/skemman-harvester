@@ -12,20 +12,21 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime
 from pathlib import Path
 
 import duckdb
 import pypdf
 from tqdm import tqdm
 
+from .config import load_config
+from .utils import PoliteSession
+
 # pypdf narrates every font and xref oddity it meets. Thousands of theses means
 # thousands of lines of "Advanced encoding /SymbolSetEncoding not implemented
 # yet" scrolling over the progress bar, and none of it is actionable: the text
 # still extracts. Errors are still shown.
 logging.getLogger("pypdf").setLevel(logging.ERROR)
-
-from .config import load_config
-from .utils import PoliteSession
 
 PAGES = 8
 
@@ -165,6 +166,15 @@ def _split_marker(raw: str) -> tuple[str, int | None]:
     return raw, None
 
 
+class TitlepageError(Exception):
+    """A thesis that could not be turned into text, with why and whether to retry."""
+
+    def __init__(self, reason: str, *, permanent: bool) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.permanent = permanent
+
+
 def _ensure_text(
     thesis_id: int,
     url: str,
@@ -172,27 +182,44 @@ def _ensure_text(
     pdf_dir: Path,
     session: PoliteSession,
     keep_pdf: bool,
-) -> tuple[str | None, int | None]:
-    """Return the cached title-page text and page count, fetching only if needed."""
+) -> tuple[str | None, int | None, bool]:
+    """Return the cached title-page text, page count, and whether it came from cache."""
     text_path = text_dir / f"{thesis_id}.txt"
     if text_path.exists():
         text, n_pages = _split_marker(text_path.read_text(encoding="utf-8", errors="replace"))
-        return text or None, n_pages
+        return text or None, n_pages, True
 
     pdf_path = pdf_dir / f"{thesis_id}.pdf"
     fetched_now = False
     if not pdf_path.exists():
-        session.download_binary(url, pdf_path)
+        try:
+            session.download_binary(url, pdf_path)
+        except Exception as exc:  # noqa: BLE001 - HTTP and network faults both land here
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            # 403/404/410 mean the file is closed or gone: fetching it again will
+            # never help, so it is recorded and skipped from now on.
+            raise TitlepageError(
+                f"download failed: {type(exc).__name__} {status or ''}".strip(),
+                permanent=status in (403, 404, 410),
+            ) from exc
         fetched_now = True
+
+        # A restricted item can answer 200 with a login page rather than a PDF.
+        if pdf_path.read_bytes()[:5] != b"%PDF-":
+            if not keep_pdf:
+                pdf_path.unlink(missing_ok=True)
+            raise TitlepageError("not a PDF (restricted or a landing page)", permanent=True)
 
     try:
         text, n_pages = extract_text(pdf_path)
-    except Exception:  # noqa: BLE001 - a broken PDF should not stop the run
-        # Nothing is cached: a failed read is usually a truncated download, and
-        # caching it would skip the thesis silently on every later run.
+    except Exception as exc:  # noqa: BLE001 - a broken PDF should not stop the run
+        # Not cached: a failed read is usually a truncated download, so it is
+        # worth one more try on a later run.
         if fetched_now and not keep_pdf:
             pdf_path.unlink(missing_ok=True)
-        return None, None
+        raise TitlepageError(
+            f"unreadable PDF: {type(exc).__name__}: {str(exc)[:120]}", permanent=False
+        ) from exc
 
     # An empty text with a good page count means a scanned PDF. That is a real
     # answer, so it is cached -- otherwise every run would fetch it again.
@@ -203,7 +230,7 @@ def _ensure_text(
     if fetched_now and not keep_pdf:
         pdf_path.unlink(missing_ok=True)
 
-    return text or None, n_pages
+    return text or None, n_pages, False
 
 
 def _create_table(con: duckdb.DuckDBPyConnection) -> None:
@@ -232,6 +259,56 @@ def _create_table(con: duckdb.DuckDBPyConnection) -> None:
         "create unique index if not exists thesis_titlepage_pk "
         "on thesis_titlepage (thesis_id)"
     )
+    # Why a thesis produced no text. `permanent` marks the ones worth skipping
+    # for good -- a closed item will not open on the next run.
+    con.execute(
+        """
+        create table if not exists thesis_titlepage_failure (
+            thesis_id  integer,
+            item_url   varchar,
+            pdf_url    varchar,
+            reason     varchar,
+            permanent  boolean,
+            failed_at  timestamp
+        )
+        """
+    )
+    con.execute(
+        "create unique index if not exists thesis_titlepage_failure_pk "
+        "on thesis_titlepage_failure (thesis_id)"
+    )
+
+
+def item_url(thesis_id: int) -> str:
+    """The Skemman item page, matching the item_url column in v_thesis."""
+    return f"https://skemman.is/handle/1946/{thesis_id}"
+
+
+def _record_failure(
+    con: duckdb.DuckDBPyConnection,
+    log,  # noqa: ANN001 - a plain text handle
+    thesis_id: int,
+    url: str,
+    reason: str,
+    permanent: bool,
+) -> None:
+    """Write the failure to the log file and to the table that suppresses retries."""
+    stamp = datetime.now()
+    # The handle URL comes first: it opens the record a human can look at, while
+    # the bitstream URL is the thing that actually failed.
+    log.write(
+        f"{stamp:%Y-%m-%d %H:%M:%S}\t{thesis_id}\t"
+        f"{'permanent' if permanent else 'retry'}\t{reason}\t"
+        f"{item_url(thesis_id)}\t{url}\n"
+    )
+    log.flush()
+    con.execute("delete from thesis_titlepage_failure where thesis_id = ?", [thesis_id])
+    con.execute(
+        "insert into thesis_titlepage_failure "
+        "(thesis_id, item_url, pdf_url, reason, permanent, failed_at) "
+        "values (?, ?, ?, ?, ?, ?)",
+        [thesis_id, item_url(thesis_id), url, reason, permanent, stamp],
+    )
 
 
 def load_titlepages(
@@ -243,10 +320,14 @@ def load_titlepages(
     config: Path = Path("config/collections.yaml"),
     keep_pdf: bool = False,
     degree_level: str = "master",
-) -> tuple[int, int]:
+    log_path: Path = Path("logs/titlepage.log"),
+    retry_failed: bool = False,
+    max_bytes: int | None = None,
+    include_closed: bool = False,
+) -> tuple[int, int, int]:
     """Load title-page fields for theses that do not have them yet.
 
-    Returns (processed, with_faculty).
+    Returns (processed, with_faculty, failed).
     """
     cfg = load_config(config)
     session = PoliteSession(
@@ -257,6 +338,9 @@ def load_titlepages(
 
     text_dir.mkdir(parents=True, exist_ok=True)
     pdf_dir.mkdir(parents=True, exist_ok=True)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log = log_path.open("a", encoding="utf-8")
+    log.write("# run {:%Y-%m-%d %H:%M:%S}\n".format(datetime.now()))
 
     with duckdb.connect(str(db)) as con:
         _create_table(con)
@@ -271,29 +355,66 @@ def load_titlepages(
             where.append("m.degree_level = ?")
             params.append(degree_level)
             where.append("p.thesis_id is null")
+            if not retry_failed:
+                # A closed item will not open next time; do not spend a request on it.
+                where.append(
+                    "m.thesis_id not in "
+                    "(select thesis_id from thesis_titlepage_failure where permanent)"
+                )
+
+        # The item page states every file's size and access, so the queue is
+        # planned before touching the network: closed files are never requested,
+        # and the small ones go first so most theses land early. Skemman serves
+        # the very large files unreliably, so they are worth leaving till last.
+        if max_bytes:
+            where.append("coalesce(f.size_bytes, 0) <= ?")
+            params.append(max_bytes)
+        if not include_closed:
+            where.append("(f.access is null or f.access = 'Opinn')")
 
         sql = f"""
             select m.thesis_id, m.pdf_url
             from thesis_metadata m
             left join thesis_titlepage p on p.thesis_id = m.thesis_id
+            left join (
+                select thesis_id, min(size_bytes) as size_bytes, min(access) as access
+                from thesis_file
+                where filetype = 'PDF'
+                group by thesis_id
+            ) f on f.thesis_id = m.thesis_id
             where {' and '.join(where)}
-            order by m.thesis_id
+            order by coalesce(f.size_bytes, 9223372036854775807), m.thesis_id
         """
         if limit:
             sql += f" limit {int(limit)}"
 
         rows = con.execute(sql, params).fetchall()
 
-        processed = with_faculty = 0
+        processed = with_faculty = failed = from_cache = 0
         bar = tqdm(rows, desc="Reading title pages", unit="thesis")
         for thesis_id, url in bar:
             try:
-                text, n_pages = _ensure_text(
+                text, n_pages, cached = _ensure_text(
                     thesis_id, url, text_dir, pdf_dir, session, keep_pdf
                 )
-            except Exception:  # noqa: BLE001 - restricted or missing files are expected
+            except TitlepageError as exc:
+                failed += 1
+                _record_failure(con, log, thesis_id, url, exc.reason, exc.permanent)
+                bar.set_postfix(parsed=processed, faculty=with_faculty, failed=failed)
                 continue
+            except Exception as exc:  # noqa: BLE001 - never let one thesis stop the run
+                failed += 1
+                _record_failure(
+                    con, log, thesis_id, url, f"unexpected: {type(exc).__name__}", False
+                )
+                bar.set_postfix(parsed=processed, faculty=with_faculty, failed=failed)
+                continue
+
+            from_cache += cached
             if not text and n_pages is None:
+                failed += 1
+                _record_failure(con, log, thesis_id, url, "no text and no page count", False)
+                bar.set_postfix(parsed=processed, faculty=with_faculty, failed=failed)
                 continue
 
             # A scanned PDF yields no text but still has a real page count, so the
@@ -314,11 +435,20 @@ def load_titlepages(
                 f"values ({', '.join('?' * len(columns))})",
                 [fields.get(c) for c in columns],
             )
+            con.execute("delete from thesis_titlepage_failure where thesis_id = ?", [thesis_id])
             processed += 1
             if fields.get("faculty") or fields.get("deild"):
                 with_faculty += 1
-            bar.set_postfix(parsed=processed, faculty=with_faculty)
+            bar.set_postfix(
+                parsed=processed, faculty=with_faculty, failed=failed, cached=from_cache
+            )
 
         con.execute("checkpoint")
 
-    return processed, with_faculty
+    log.write(
+        f"# done {datetime.now():%Y-%m-%d %H:%M:%S}  "
+        f"parsed={processed} from_cache={from_cache} failed={failed}\n"
+    )
+    log.close()
+
+    return processed, with_faculty, failed
