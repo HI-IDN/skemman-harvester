@@ -27,6 +27,10 @@ OAI_PAGE = """<?xml version="1.0" encoding="UTF-8"?>
           <dc:subject>Nitrogenase</dc:subject>
           <dc:subject>Meistaraprófsritgerðir</dc:subject>
           <dc:description>English abstract text.</dc:description>
+          <dc:contributor>Háskóli Íslands</dc:contributor>
+          <dc:type>Thesis</dc:type>
+          <dc:type>Master's</dc:type>
+          <dc:relation>https://example.org/source</dc:relation>
           <dc:date>2018-05</dc:date>
           <dc:identifier>http://hdl.handle.net/1946/30550</dc:identifier>
         </oai_dc:dc>
@@ -100,5 +104,8 @@ def test_parses_records_and_resumption_token():
             "authors": "Barði Benediktsson 1992-; Annar Höfundur",
             "subjects": ["Nitrogenase", "Meistaraprófsritgerðir"],
             "descriptions": ["English abstract text."],
+            "contributors": ["Háskóli Íslands"],
+            "types": ["Thesis", "Master's"],
+            "relations": ["https://example.org/source"],
         }
     ]

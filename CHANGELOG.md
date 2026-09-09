@@ -5,6 +5,36 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- **`files-load`** fills `thesis_file` from the `xoai` metadata format. xoai is DSpace's
+  own format and it lists every attached file with its name, size, MIME type, download URL
+  and the bundle description DSpace filed it under, `COMPLETE_TEXT` or `DECLARATION` —
+  the repository itself saying which attachment is the thesis and which is the form the
+  student signs. Harvest the pages with `oai-pmh --metadata-prefix xoai` and this replays
+  them offline. About 66 requests for a whole collection, where `files-index` reads the
+  same thing off item pages at one request each — 6291 of them on Skemman's engineering
+  collections.
+- `role` on `thesis_file`: `primary` for the file that is the thesis, `secondary` for
+  everything else. A database created before the column existed gains it on the next run.
+
+### Changed
+
+- **`titlepage-load` takes the PDF URL from `thesis_file`, not `thesis_metadata.pdf_url`.**
+  `pdf_url` was only ever filled by the item-page scraper, which nothing has called since
+  OAI-PMH replaced it, so on a database built from scratch the column was empty and the
+  loader selected nothing at all.
+- The download queue picks one file per thesis by `role`, falling back to the description
+  and only then to size. Size alone is wrong on 469 of 2410 multi-file items, where the
+  scanned declaration form is larger than the thesis.
+- An unknown access status counts as worth trying. xoai does not carry access at all, and
+  a fetch that fails is recorded like any other; `Opinn` and a lapsed embargo still count
+  as open, and a live embargo still does not.
+- `titlepage-load --degree-level master` now also takes records with no degree level.
+  841 of Skemman's records state none, and master's theses are among them.
+
 ## [1.1.0] — 2026-09-09
 
 ### Changed

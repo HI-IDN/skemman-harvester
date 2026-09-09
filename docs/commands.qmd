@@ -2,12 +2,13 @@
 title: "Commands"
 ---
 
-Five commands. Each is resumable, and each caches what it fetches, so re-running does only
+Six commands. Each is resumable, and each caches what it fetches, so re-running does only
 what is missing.
 
 ## `oai-pmh`
 
-Reads a collection's OAI-PMH records into `thesis`.
+Reads a collection's OAI-PMH records into `thesis`, `thesis_metadata`, and the keyword
+tables.
 
 ```bash
 skemman oai-pmh
@@ -27,9 +28,15 @@ skemman oai-pmh
 Re-running the configured handles picks up newly deposited theses; existing ids are left
 alone.
 
+Use `--metadata-prefix xoai` to cache DSpace's richer OAI format for attached files:
+
+```bash
+skemman oai-pmh --metadata-prefix xoai
+```
+
 ## `metadata-load`
 
-Fetches each item page and parses it.
+Reloads normalized metadata from cached OAI-PMH XML.
 
 ```bash
 skemman metadata-load --ids 25337
@@ -37,20 +44,43 @@ skemman metadata-load --ids 25337
 
 | Option | Meaning |
 | --- | --- |
-| `--ids` | Comma-separated thesis ids. Default: everything missing metadata. |
-| `--out-html` | HTML cache directory. Default `data/raw/items`. |
-| `--delay` | Seconds between requests. |
+| `--ids` | Comma-separated thesis ids. Default: every id already in `thesis`. |
+| `--oai-dir` | OAI XML cache directory. Default `data/raw/oai`. |
+
+## `files-load`
+
+Loads file rows from cached `xoai` pages. **No network.**
+
+```bash
+skemman files-load
+```
+
+This fills `thesis_file` with filename, byte size, file type, download URL and a
+`primary`/`secondary` role inferred from DSpace's bundle description and the filename.
+
+| Option | Meaning |
+| --- | --- |
+| `--ids` | Comma-separated thesis ids. Default: every id found in cached `xoai`. |
+| `--oai-dir` | OAI XML cache directory. Default `data/raw/oai`. |
 
 ## `files-index`
 
-Reads the file table off the cached HTML into `thesis_file`. **No network.**
+Fetches item pages and stores only their file tables in `thesis_file`.
 
 ```bash
 skemman files-index
 ```
 
-This is what makes the next step cheap: knowing a file's size and access status beforehand
-means closed files are never requested and small ones go first.
+This adds Skemman's explicit open/closed labels to the file rows.
+
+For most runs, `files-load` is enough. Use `files-index` when Skemman's explicit open/closed
+labels are needed before trying PDF downloads.
+
+| Option | Meaning |
+| --- | --- |
+| `--ids` | Comma-separated thesis ids. Default: everything not yet indexed. |
+| `--limit` | Stop after N theses. |
+| `--config`, `-c` | Config path for base URL, user-agent, delay and timeout. |
 
 ## `titlepage-load`
 

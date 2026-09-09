@@ -1,16 +1,34 @@
 # Skemman harvester settings.
 base_url: "https://skemman.is"
-user_agent: "skemman-harvester/1.1 research crawler; contact: helgaingim@hi.is"
+# TODO: put YOUR OWN contact address here before harvesting.
+#
+# This is the only way the library can reach whoever is running the crawler.
+# Left as the placeholder, your traffic is anonymous - and an anonymous crawler
+# gets blocked rather than emailed when something goes wrong. Do not leave
+# someone else's address here either: they will be blamed for your requests.
+user_agent: "skemman-harvester/1.2 research crawler; contact: CHANGE-ME@example.org"
 # skemman.is/robots.txt asks for Crawl-delay: 30. Lowering this is a
 # decision to ignore what the server asked for, so leave it unless you have
 # spoken to the people running it.
 request_delay_seconds: 30.0
-timeout_seconds: 30
+# Seconds to wait on a single read. Theses run to hundreds of megabytes - the
+# largest seen is 544 MB - and Skemman serves the big ones slowly. This is a
+# per-read timeout, not a total, so a slow file is not cut off for being large.
+timeout_seconds: 120
 
 year_start: 2010
 year_end: 2026
 record_limit:
-titlepage_pages: 8
+titlepage_pages: 20
+
+# Theses to check by hand after a parser change, used by `--test` on the
+# loaders. Pick ones you know the right answer for: your own work, your
+# students', an item you have the PDF of. A parser that regresses on a thesis
+# you can read yourself is caught in seconds; one that regresses on a stranger's
+# is caught in a month, if ever.
+#
+# test_ids: [12345, 23456]
+test_ids:
 
 handles:
   HI: "1946/2064"

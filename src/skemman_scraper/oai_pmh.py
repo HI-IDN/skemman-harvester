@@ -13,6 +13,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from .utils import PoliteSession
+from .xoai import parse_xoai_records
 
 OAI_NS = "http://www.openarchives.org/OAI/2.0/"
 DC_NS = "http://purl.org/dc/elements/1.1/"
@@ -188,6 +189,9 @@ def parse_oai_pmh_records(xml: str) -> tuple[list[dict[str, Any]], str | None]:
         creators = _dc_values(record, "creator")
         subjects = _dc_values(record, "subject")
         descriptions = _dc_values(record, "description")
+        contributors = _dc_values(record, "contributor")
+        types = _dc_values(record, "type")
+        relations = _dc_values(record, "relation")
         rows.append(
             {
                 "id": thesis_id,
@@ -196,6 +200,9 @@ def parse_oai_pmh_records(xml: str) -> tuple[list[dict[str, Any]], str | None]:
                 "authors": "; ".join(creators) if creators else None,
                 "subjects": subjects,
                 "descriptions": descriptions,
+                "contributors": contributors,
+                "types": types,
+                "relations": relations,
             }
         )
 
@@ -292,12 +299,19 @@ def harvest_oai_pmh(
                 xml = session.get_text(target_url, use_cache=False)
                 if cache_path:
                     cache_path.write_text(xml, encoding="utf-8")
-            page_rows, next_token = parse_oai_pmh_records(xml)
-            page_rows = _filter_rows_by_year(
-                page_rows,
-                year_start=year_start,
-                year_end=year_end,
-            )
+            # Each metadata format has its own shape. xoai records carry the
+            # file bundles and no dc:date, so the year filter has nothing to
+            # read and would discard every row; the years are already settled
+            # on the oai_dc side, where the records themselves are written.
+            if metadata_prefix == "xoai":
+                page_rows, next_token = parse_xoai_records(xml)
+            else:
+                page_rows, next_token = parse_oai_pmh_records(xml)
+                page_rows = _filter_rows_by_year(
+                    page_rows,
+                    year_start=year_start,
+                    year_end=year_end,
+                )
             if limit is not None:
                 page_rows = page_rows[: max(limit - len(rows), 0)]
             if on_page:

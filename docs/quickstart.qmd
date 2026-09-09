@@ -19,29 +19,40 @@ Through Skemman's OAI-PMH endpoint, using handles and years from `config/collect
 skemman oai-pmh --output thesis.db
 ```
 
-This fills `thesis`: one row per search result, with the id, date, title and authors.
+This fills `thesis` plus the OAI-provided metadata: keywords, abstracts, types,
+contributors and relations.
 
-## 3. The item pages
+## 3. Normalize cached OAI
 
 ```bash
 skemman metadata-load --db thesis.db
 ```
 
-Fetches each item page once and parses it into `thesis_metadata`, `people`,
-`thesis_people`, `keywords` and `thesis_keywords`. The HTML is cached, so this is the only
-time each page is fetched.
+Replays the cached OAI XML into normalized metadata tables. This is useful after parser
+improvements and does not touch the network.
 
 ## 4. What is attached
+
+```bash
+skemman oai-pmh --output thesis.db --metadata-prefix xoai
+skemman files-load --db thesis.db
+```
+
+The `xoai` metadata format includes DSpace's file bundles, so this fills `thesis_file`
+from cached OAI XML: filename, byte size, file type, download URL and which attachment is
+the primary thesis file.
+
+Run this **before** step 5. It lets the harvester try the primary thesis file first and
+prefer smaller PDFs when there is a choice.
+
+If you need Skemman's explicit open/closed labels before trying downloads, run:
 
 ```bash
 skemman files-index --db thesis.db
 ```
 
-No network at all — it reads the file table off the HTML step 3 already saved, into
-`thesis_file`: filename, size, access status and type.
-
-Run this **before** step 5. It is what lets the harvester skip closed files and take small
-ones first.
+That fetches item pages and stores only the file table. Raw item HTML is not cached.
+Those page rows include Skemman's open/closed labels.
 
 ## 5. The title pages
 

@@ -13,7 +13,8 @@ it at a collection handle and it builds a queryable database of what is there.
 ```bash
 skemman oai-pmh
 skemman metadata-load
-skemman files-index
+skemman oai-pmh --metadata-prefix xoai
+skemman files-load
 skemman titlepage-load --degree-level master
 ```
 
@@ -27,12 +28,6 @@ skemman titlepage-load --degree-level master
   cached, so a re-run fetches only what is missing.
 - **No hoarding.** PDFs are deleted after their first pages are read to text, unless you
   ask to keep them. A full master's harvest costs about 20 MB on disk rather than 12 GB.
-
-> [!WARNING]
-> `oai-pmh` lists records through `/oai/request`, the standard repository-harvesting
-> interface. The old `/simple-search` listing path is intentionally not used because
-> [robots.txt](https://skemman.is/robots.txt) disallows it. See
-> [Crawling etiquette](https://hi-idn.github.io/skemman-harvester/etiquette.html).
 
 ## Install
 
@@ -49,7 +44,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-## The four steps
+## The five steps
 
 Each is resumable and each caches what it fetches.
 
@@ -73,32 +68,40 @@ harvest is interrupted, the next run continues from that token. `--limit` test r
 write a checkpoint.
 
 The OAI XML includes `dc:subject` and `dc:description`, so `oai-pmh` also preloads
-keywords and abstracts. Item pages are still used for page-only details such as advisor
-metadata, breadcrumbs, PDF URLs, and the attached-file table.
+keywords and abstracts.
 
-### 2. `metadata-load` — the item pages
+### 2. `metadata-load` — normalize cached OAI
 
-Fetches each item page and parses page-only details into normalized tables: degree level,
-advisors, breadcrumbs, PDF URLs, and other metadata that OAI-PMH does not expose. Raw HTML
-is cached under `data/raw/items/`, so a re-run reuses it.
+Replays the cached OAI XML into normalized metadata tables. Use this after parser
+improvements to reload keywords, abstracts, types, contributors and relations without
+touching the network.
 
 ```bash
 skemman metadata-load
 ```
 
-### 3. `files-index` — what is attached, and whether it is open
+### 3. `oai-pmh --metadata-prefix xoai` — attached files
 
-Reads the file table on each cached item page: filename, size, access status and type.
-No network at all — it works off the HTML step 2 already saved.
-
-This is what makes step 4 cheap. It knows a file's size and whether it is open before
-deciding to request it.
+Harvests DSpace's richer OAI metadata format, which includes the attached files and their
+bundle descriptions.
 
 ```bash
-skemman files-index
+skemman oai-pmh --metadata-prefix xoai
 ```
 
-### 4. `titlepage-load` — what the document itself says
+### 4. `files-load` — file rows, offline
+
+Replays cached `xoai` XML into `thesis_file`: filename, byte size, file type, download URL
+and whether DSpace filed the attachment as the thesis or a declaration form.
+
+```bash
+skemman files-load
+```
+
+If you also need Skemman's open/closed labels before PDF fetching, run `files-index`.
+It fetches item pages and stores only their file tables; raw item HTML is not cached.
+
+### 5. `titlepage-load` — what the document itself says
 
 Repository keywords are a suggestion. The title page states the faculty, the credits and
 the degree outright, and carries fields the metadata does not expose at all — ECTS, and
@@ -122,21 +125,9 @@ skemman titlepage-load
 
 ## Configuration
 
-`config/collections.yaml`:
-
-```yaml
-base_url: "https://skemman.is"
-user_agent: "skemman-harvester/1.1 research crawler; contact: you@example.is"
-request_delay_seconds: 2.0
-timeout_seconds: 30
-year_start: 2010
-year_end: 2026
-record_limit:
-titlepage_pages: 8
-handles:
-  HI: "1946/2064"
-  HR: "1946/6870"
-```
+Copy `config/collections.yaml` and edit it for your collections, years and contact
+address. The install docs render that file directly, so the published example stays in
+sync with the checked-in defaults.
 
 Put a real contact address in `user_agent`. It is the courtesy that makes a crawler
 identifiable to the people running the server.

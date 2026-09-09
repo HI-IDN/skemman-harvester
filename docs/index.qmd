@@ -11,7 +11,8 @@ already publishes and turns it into something you can query:
 ```bash
 skemman oai-pmh --location 1946/2064 --year-start 2010 --year-end 2026
 skemman metadata-load
-skemman files-index
+skemman oai-pmh --metadata-prefix xoai
+skemman files-load
 skemman titlepage-load --degree-level master
 ```
 
@@ -34,7 +35,7 @@ When the two disagree, the document wins.
 - **No logins, no credentials.** Only what Skemman serves publicly.
 - **No bypassing access rules.** A file the item page marks `Lokaður` is recorded as closed
   and never requested. Embargo dates are respected by simply obeying them.
-- **No hammering.** One request at a time, with a configurable delay — two seconds by
+- **No hammering.** One request at a time, with a configurable delay — 30 seconds by
   default.
 - **No hoarding.** PDFs are deleted once their first pages are read to text. A full
   master's harvest costs about 20 MB rather than 12 GB.

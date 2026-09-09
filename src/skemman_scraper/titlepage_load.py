@@ -23,12 +23,32 @@ from .config import load_config
 from .utils import PoliteSession
 
 # pypdf narrates every font and xref oddity it meets. Thousands of theses means
-# thousands of lines of "Advanced encoding /SymbolSetEncoding not implemented
-# yet" scrolling over the progress bar, and none of it is actionable: the text
-# still extracts. Errors are still shown.
+# thousands of lines scrolling over the progress bar, and none of it is
+# actionable: the text still extracts. Real errors are still shown.
 logging.getLogger("pypdf").setLevel(logging.ERROR)
 
-PAGES = 8
+
+class _UnimplementedEncoding(logging.Filter):
+    """Drop pypdf's "not implemented yet" notes, whatever level it logs them at.
+
+    "Advanced encoding /SymbolSetEncoding not implemented yet" goes through
+    pypdf's `logger_error`, so raising the level does not silence it, and it
+    arrives once per font on any document that sets a heading in a symbol font.
+    The page still extracts -- the note only says a glyph table went unmapped.
+
+    pypdf logs under the name of the module that spoke, so this has to be
+    attached to `pypdf._cmap` itself: a filter on the parent `pypdf` logger is
+    never consulted for records a child logger creates. Filtering the message
+    rather than muting the logger keeps genuine cmap errors visible.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "not implemented yet" not in str(record.msg)
+
+
+logging.getLogger("pypdf._cmap").addFilter(_UnimplementedEncoding())
+
+PAGES = 20
 
 # The cached text carries the PDF's page count on a first marker line, so a
 # re-parse does not need the PDF back just to know how long the thesis was.
@@ -36,20 +56,36 @@ PAGE_MARKER = "%%PAGES	"
 
 # --- title page fields -----------------------------------------------------
 
+LETTERS = "A-Za-zÁÉÍÓÚÝÞÆÖÐáéíóúýþæöð"
+PATTERN_TAIL = r"\s+([^\n]{3,70})"
+PATTERN_EN_STOP = r"\s+(?:university of iceland|reykjav[ií]k university|háskól\w+)\b.*$"
+
+# "Faculty of Physical Sciences University of Iceland" -- the unit runs until the
+# university's own name starts, not to the end of the line.
+_EN_TAIL = re.compile(r"(?i)" + PATTERN_EN_STOP)
+
 _PREFIXED = {
-    "faculty": re.compile(r"(?i)^faculty of\s+(.{3,70})$"),
-    "school": re.compile(r"(?i)^school of\s+(.{3,70})$"),
-    "department": re.compile(r"(?i)^department of\s+(.{3,70})$"),
+    "faculty": re.compile(r"(?i)faculty of" + PATTERN_TAIL),
+    "school": re.compile(r"(?i)school of" + PATTERN_TAIL),
+    "department": re.compile(r"(?i)department of" + PATTERN_TAIL),
 }
 
-# An Icelandic unit name: "Umhverfis- og byggingarverkfraedideild".
-_DEILD = re.compile(
-    r"(?i)^([A-ZÁÉÍÓÚÝÞÆÖÐ][A-Za-zÁÉÍÓÚÝÞÆÖÐáéíóúýþæöð\-]{2,}"
-    r"(?:[-\s]og[-\s][A-Za-zÁÉÍÓÚÝÞÆÖÐáéíóúýþæöð\-]+)*deild)\s*$"
-)
-_SVID = re.compile(
-    r"(?i)^([A-ZÁÉÍÓÚÝÞÆÖÐ][A-Za-zÁÉÍÓÚÝÞÆÖÐáéíóúýþæöð\-]{2,}"
-    r"(?:[-\s]og[-\s][A-Za-zÁÉÍÓÚÝÞÆÖÐáéíóúýþæöð\-]+)*svið)\s*$"
+# An Icelandic unit name: "Umhverfis- og byggingarverkfraedideild",
+# "Idnadarverkfraedi-, velaverkfraedi- og tolvunarfraedideild".
+#
+# Three things this has to allow, each of which cost real coverage when it did
+# not. The line is not the name: "HASKOLI ISLANDS Jardvisindadeild" puts the
+# university in front of it, so the pattern searches rather than anchors. The
+# join is "- og " -- a hyphen, a space and the word -- not a single character.
+# And the name is often inflected: "Raunvisindadeildar", "skor" for the older
+# sub-units, "sviods" for a school.
+_UNIT_WORD = "(?:deild(?:ar|in|inni|arinnar)?|svið[si]?|skor(?:ar|inni)?)"
+_UNIT = re.compile(
+    # The fragment must end on a hyphen or a comma. Letting it end on nothing
+    # made the prefix and the head noun able to match the same characters,
+    # and the pattern went quadratic on long lines: the suite took a minute.
+    "(?i)((?:[" + LETTERS + r"]{2,}[-,]+\s*(?:og\s+)?){0,4}"
+    "[" + LETTERS + "]{2,}" + _UNIT_WORD + ")",
 )
 
 _ECTS = re.compile(r"(?i)\b(\d{1,3})\s*ECTS\b")
@@ -58,7 +94,14 @@ _DEGREE = re.compile(
     r"Master of Engineering|Master of Project Management|Magister Paedagogiae)\b"
 )
 # English "degree in X" and Icelandic "meistaraprofs (MSc) i X".
-_SUBJECT_EN = re.compile(r"(?i)\bdegree in\s+([A-Za-zÁÉÍÓÚÝÞÆÖÐáéíóúýþæöð&,\- ]{3,60})")
+# Two English forms. The template most theses follow splits them over two
+# lines -- "...for the degree of" then "Master of Science in X" -- so the
+# degree name itself has to introduce the subject, not just "degree in".
+# 164 of the 171 theses using that wording were losing their subject.
+_SUBJECT_EN = re.compile(
+    r"(?i)\b(?:degree in|Master of (?:Science|Arts|Engineering|Project Management) in)\s+"
+    r"([A-Za-zÁÉÍÓÚÝÞÆÖÐáéíóúýþæöð&,\- ]{3,60})"
+)
 _SUBJECT_IS = re.compile(
     r"(?i)meistarapr[óo]fs?\s*(?:\([^)]*\))?\s*í\s+([A-Za-zÁÉÍÓÚÝÞÆÖÐáéíóúýþæöð&,\- ]{3,60})"
 )
@@ -109,15 +152,22 @@ def parse_titlepage(text: str) -> dict[str, object]:
 
     for key, pattern in _PREFIXED.items():
         for ln in lines:
-            if m := pattern.match(ln):
-                out[key] = m.group(1).strip(" ,.")
+            if m := pattern.search(ln):
+                out[key] = _EN_TAIL.sub("", m.group(1)).strip(" ,.")
                 break
 
-    for key, pattern in (("deild", _DEILD), ("svid", _SVID)):
-        for ln in lines:
-            if m := pattern.match(ln):
-                out[key] = m.group(1)
-                break
+    # The same pattern finds both; which column it lands in is decided by the
+    # word it ends on, so "Verkfraedi- og natturuvisindasvid" is a svid and
+    # "Jardvisindadeild" a deild without needing two near-identical patterns.
+    for ln in lines:
+        for m in _UNIT.finditer(ln):
+            name = " ".join(m.group(1).split())
+            if len(name) < 9:
+                continue
+            key = "svid" if re.search(r"(?i)svið[si]?$", name) else "deild"
+            out.setdefault(key, name)
+        if "deild" in out and "svid" in out:
+            break
 
     joined = " ".join(lines)
     if m := _ECTS.search(joined):
@@ -156,15 +206,35 @@ def extract_text(pdf: Path, pages: int | None = PAGES) -> tuple[str, int]:
     return text, total
 
 
-def _split_marker(raw: str) -> tuple[str, int | None]:
-    """Split the cached page-count marker off the stored text."""
+def _split_marker(raw: str) -> tuple[str, int | None, int | None]:
+    """Split the cached marker off the stored text.
+
+    The marker carries the document total page count and how many of those
+    pages were actually extracted: `%%PAGES\t106\t20`. Caches written
+    before the second field existed report `None` for it, which makes them
+    stale -- there is no way to tell how much of such a file was kept.
+    """
     if raw.startswith(PAGE_MARKER):
         head, _, rest = raw.partition("\n")
+        fields = head[len(PAGE_MARKER):].split("\t")
         try:
-            return rest, int(head[len(PAGE_MARKER):])
-        except ValueError:
-            return rest, None
-    return raw, None
+            total = int(fields[0])
+        except (ValueError, IndexError):
+            return rest, None, None
+        try:
+            kept = int(fields[1])
+        except (ValueError, IndexError):
+            kept = None
+        return rest, total, kept
+    return raw, None, None
+
+
+def _is_stale(total: int | None, kept: int | None, pages: int | None) -> bool:
+    """Does this cache hold fewer pages than the caller is asking for?"""
+    if total is None or kept is None:
+        return True
+    wanted = total if pages is None else min(pages, total)
+    return kept < wanted
 
 
 class TitlepageError(Exception):
@@ -174,6 +244,33 @@ class TitlepageError(Exception):
         super().__init__(reason)
         self.reason = reason
         self.permanent = permanent
+
+
+
+# A title page that states the degree is a title page we read the right file
+# for. Skemman's items often carry several PDFs and the first open one is not
+# always the thesis -- a declaration form, a cover sheet, an appendix. When the
+# first file says nothing about a degree, the others are worth a look.
+#
+# The English words alone are not enough: 216 of the cached texts say only
+# "meistara" and would be thrown away by an `msc|master` test.
+DEGREE_PATTERN = re.compile(
+    r"master|magister|meistara|\bm\.?\s?sc\b",
+    re.I,
+)
+
+_BITSTREAM_SEQ = re.compile(r"/bitstream/\d+/\d+/(\d+)/")
+
+
+def bitstream_seq(url: str | None) -> int:
+    """The sequence number DSpace gives a file: /bitstream/1946/53215/2/name.pdf."""
+    m = _BITSTREAM_SEQ.search(url or "")
+    return int(m.group(1)) if m else 9999
+
+
+def states_a_degree(text: str | None) -> bool:
+    """Does this text look like a title page rather than a form or an appendix?"""
+    return bool(text and DEGREE_PATTERN.search(text))
 
 
 def _ensure_text(
@@ -188,8 +285,13 @@ def _ensure_text(
     """Return the cached title-page text, page count, and whether it came from cache."""
     text_path = text_dir / f"{thesis_id}.txt"
     if text_path.exists():
-        text, n_pages = _split_marker(text_path.read_text(encoding="utf-8", errors="replace"))
-        return text or None, n_pages, True
+        text, n_pages, kept = _split_marker(
+            text_path.read_text(encoding="utf-8", errors="replace")
+        )
+        # A cache holding fewer pages than asked for is fetched again rather
+        # than returned short: raising `titlepage_pages` has to take effect.
+        if not _is_stale(n_pages, kept, pages):
+            return text or None, n_pages, True
 
     pdf_path = pdf_dir / f"{thesis_id}.pdf"
     fetched_now = False
@@ -226,7 +328,10 @@ def _ensure_text(
     # An empty text with a good page count means a scanned PDF. That is a real
     # answer, so it is cached -- otherwise every run would fetch it again.
     text_dir.mkdir(parents=True, exist_ok=True)
-    text_path.write_text(f"{PAGE_MARKER}{n_pages}\n{text}", encoding="utf-8")
+    kept = n_pages if pages is None else min(pages, n_pages)
+    text_path.write_text(
+        f"{PAGE_MARKER}{n_pages}\t{kept}\n{text}", encoding="utf-8"
+    )
 
     # The text is what we keep; the PDF can always be fetched again.
     if fetched_now and not keep_pdf:
@@ -350,14 +455,19 @@ def load_titlepages(
     with duckdb.connect(str(db)) as con:
         _create_table(con)
 
-        where = ["m.pdf_url is not null"]
+        where = ["f.pdf_url is not null"]
         params: list[object] = []
         if ids:
             wanted = [int(x) for x in ids.split(",") if x.strip()]
             where.append(f"m.thesis_id in ({','.join('?' * len(wanted))})")
             params.extend(wanted)
         else:
-            where.append("m.degree_level = ?")
+            # An unknown degree level is not a bachelor's. 841 records carry
+            # no level at all, and master's theses are certainly among them --
+            # cheaper to read a title page that turns out to be the wrong level
+            # than to drop a thesis that belongs in the population. The level
+            # the document itself states is what the analysis trusts anyway.
+            where.append("(m.degree_level = ? or m.degree_level is null)")
             params.append(degree_level)
             where.append("p.thesis_id is null")
             if not retry_failed:
@@ -372,23 +482,71 @@ def load_titlepages(
         # and the small ones go first so most theses land early. Skemman serves
         # the very large files unreliably, so they are worth leaving till last.
         if max_bytes:
-            where.append("coalesce(f.size_bytes, 0) <= ?")
+            where.append("coalesce(f.open_size, f.any_size, 0) <= ?")
             params.append(max_bytes)
         if not include_closed:
-            where.append("(f.access is null or f.access = 'Opinn')")
+            # A thesis with no indexed files is still worth trying; one whose
+            # PDFs are all closed is not. Aggregating access with min() would
+            # have excluded any thesis carrying a closed file alongside an open
+            # one -- 'Lokadur' sorts before 'Opinn' -- which is most of them.
+            where.append("(f.thesis_id is null or f.open_pdfs > 0)")
 
-        sql = f"""
-            select m.thesis_id, m.pdf_url
+        sql = rf"""
+            select m.thesis_id, f.pdf_url
             from thesis_metadata m
             left join thesis_titlepage p on p.thesis_id = m.thesis_id
             left join (
-                select thesis_id, min(size_bytes) as size_bytes, min(access) as access
-                from thesis_file
-                where filetype = 'PDF'
-                group by thesis_id
+                -- One row per thesis: the file that is the thesis itself, and
+                -- what is known about getting hold of it.
+                --
+                -- `role` is set where the file table came from xoai, which is
+                -- DSpace saying outright which attachment is COMPLETE_TEXT and
+                -- which is the DECLARATION form. The description and the size
+                -- are only fallbacks, for rows indexed before that existed --
+                -- and size is a poor one: a one-page scanned declaration is
+                -- often the larger file.
+                --
+                -- Access is a three-state thing here. 'Opinn' is open.
+                -- "Lokadur til 13.06.2026" is an embargo with an end date, and
+                -- the record keeps saying so long after it lapsed, so a date
+                -- in the past counts as open. Null means nobody has looked:
+                -- xoai does not carry the access status at all. Unknown is
+                -- treated as worth trying -- the fetch either works or is
+                -- recorded as a failure, which is how the status gets known.
+                select thesis_id,
+                       url as pdf_url,
+                       case when is_open then 1 else 0 end as open_pdfs,
+                       case when is_open then size_bytes end as open_size,
+                       size_bytes as any_size
+                from (
+                    select thesis_id,
+                           url,
+                           size_bytes,
+                           (
+                               access is null
+                               or access = 'Opinn'
+                               or try_strptime(
+                                   regexp_extract(access, '(\d{2}\.\d{2}\.\d{4})', 1),
+                                   '%d.%m.%Y'
+                               )::date <= current_date
+                           ) as is_open,
+                           row_number() over (
+                               partition by thesis_id
+                               order by
+                                   case when role = 'primary' then 0 else 1 end,
+                                   case when description = 'Heildartexti' then 0 else 1 end,
+                                   case when lower(coalesce(description, ''))
+                                             in ('yfirlýsing', 'yfirlysing')
+                                        then 1 else 0 end,
+                                   size_bytes desc nulls last
+                           ) as rn
+                    from thesis_file
+                    where filetype = 'PDF'
+                )
+                where rn = 1
             ) f on f.thesis_id = m.thesis_id
             where {' and '.join(where)}
-            order by coalesce(f.size_bytes, 9223372036854775807), m.thesis_id
+            order by coalesce(f.open_size, f.any_size, 9223372036854775807), m.thesis_id
         """
         if limit:
             sql += f" limit {int(limit)}"

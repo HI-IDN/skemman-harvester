@@ -7,11 +7,11 @@ universities. It is a public service, not a CDN, and it should be treated accord
 
 ## What robots.txt asks for
 
-[skemman.is/robots.txt](https://skemman.is/robots.txt) states two things that matter here:
+[skemman.is/robots.txt](https://skemman.is/robots.txt) states the crawl delay this tool
+uses by default:
 
 ```
 User-agent: *
-Disallow: /simple-search
 ...
 Crawl-delay: 30
 ```
@@ -21,8 +21,6 @@ Crawl-delay: 30
 ignore what the server asked for. If you have a reason — a conversation with the library,
 a tiny harvest — that is yours to make, but make it deliberately.
 
-**`/simple-search` is disallowed.** Use `oai-pmh` for listing records.
-
 ::: {.callout-warning}
 ## Listing uses OAI-PMH
 
@@ -31,7 +29,7 @@ Skemman is a DSpace repository and exposes **OAI-PMH** at
 listing records out of a repository, designed for exactly this, and not disallowed. The
 `oai-pmh` command uses this endpoint.
 
-`/handle/` and `/bitstream/`, which `metadata-load` and `titlepage-load` use, are not
+`/handle/` and `/bitstream/`, which `files-index` and `titlepage-load` use, are not
 disallowed.
 :::
 

@@ -12,16 +12,12 @@ from .config import load_config
 from .files_index import load_file_index
 from .metadata_load import (
     clean_people_table,
-    extract_icelandic_abstract,
-    extract_notes,
-    insert_keyword_links,
-    is_icelandic_text,
-    load_metadata,
-    normalise_text,
-    split_keywords,
+    load_oai_metadata,
+    write_oai_metadata_rows,
 )
 from .oai_pmh import harvest_oai_pmh, set_spec_from_location
 from .titlepage_load import load_titlepages
+from .xoai import load_files_from_xoai
 
 app = typer.Typer(help="Skemman thesis metadata loader")
 console = Console()
@@ -61,100 +57,6 @@ def write_thesis_rows(df: pd.DataFrame, db_path: Path) -> None:
         )
 
 
-def _pick_oai_abstract(descriptions: list[str]) -> tuple[str | None, str | None, str | None]:
-    descriptions = [cleaned for value in descriptions if (cleaned := normalise_text(value))]
-    abstract_is, descriptions = extract_icelandic_abstract(descriptions)
-    note, descriptions = extract_notes(descriptions)
-
-    icelandic = [value for value in descriptions if is_icelandic_text(value)]
-    other = [value for value in descriptions if not is_icelandic_text(value)]
-    if not abstract_is and icelandic:
-        abstract_is = icelandic[0]
-    abstract_en = other[0] if other else None
-    return abstract_is, abstract_en, note
-
-
-def write_oai_metadata_rows(rows: list[dict[str, Any]], db_path: Path) -> None:
-    with duckdb.connect(str(db_path)) as con:
-        con.execute("create sequence if not exists keyword_id_seq start 1")
-        con.execute(
-            """
-            create table if not exists thesis_metadata (
-                thesis_id integer,
-                title_is varchar,
-                title_en varchar,
-                abstract_is varchar,
-                abstract_en varchar,
-                degree_level varchar,
-                thesis_type varchar,
-                sponsor varchar,
-                note varchar,
-                related_url varchar,
-                raw_keywords varchar,
-                pdf_url varchar,
-                institution varchar,
-                school varchar,
-                university varchar,
-                faculty varchar,
-                study_category varchar,
-                thesis_type_label varchar
-            )
-            """
-        )
-        con.execute(
-            """
-            create table if not exists keywords (
-                id bigint default nextval('keyword_id_seq'),
-                keyword varchar,
-                keyword_norm varchar
-            )
-            """
-        )
-        con.execute(
-            """
-            create table if not exists thesis_keywords (
-                thesis_id integer,
-                keyword_id bigint,
-                sort_order integer
-            )
-            """
-        )
-        con.execute("create unique index if not exists keywords_norm_uq on keywords (keyword_norm)")
-        con.execute(
-            "create unique index if not exists thesis_keywords_uq on thesis_keywords "
-            "(thesis_id, keyword_id)"
-        )
-
-        for row in rows:
-            thesis_id = int(row["id"])
-            keywords = split_keywords(row.get("subjects", []))
-            abstract_is, abstract_en, note = _pick_oai_abstract(row.get("descriptions", []))
-            con.execute(
-                """
-                insert into thesis_metadata (thesis_id,
-                                             abstract_is,
-                                             abstract_en,
-                                             note,
-                                             raw_keywords)
-                select ?, ?, ?, ?, ?
-                where not exists (
-                    select 1
-                    from thesis_metadata
-                    where thesis_id = ?
-                )
-                """,
-                [
-                    thesis_id,
-                    abstract_is,
-                    abstract_en,
-                    note,
-                    "; ".join(keywords) if keywords else None,
-                    thesis_id,
-                ],
-            )
-            insert_keyword_links(con, thesis_id, keywords)
-
-
 @app.command(name="oai-pmh")
 def oai_pmh_cmd(
         location: str | None = typer.Option(None, "--location", "-l"),
@@ -190,8 +92,14 @@ def oai_pmh_cmd(
             nonlocal written
             if not page_rows:
                 return
-            write_thesis_rows(pd.DataFrame(page_rows), output)
-            write_oai_metadata_rows(page_rows, output)
+            # Only oai_dc carries the bibliographic record. xoai carries the
+            # file bundles and no title or date, so writing its rows here would
+            # blank the columns oai_dc filled. Its pages are cached on disk by
+            # the harvest itself; `files-load` reads them from there. Counting
+            # them still matters: it is what keeps the resumption checkpoint.
+            if metadata_prefix == "oai_dc":
+                write_thesis_rows(pd.DataFrame(page_rows), output)
+                write_oai_metadata_rows(page_rows, output)
             written += len(page_rows)
 
         df = harvest_oai_pmh(
@@ -212,7 +120,12 @@ def oai_pmh_cmd(
             continue
         total += written
         console.print(f"[blue]OAI-PMH set: {target_set}[/blue]")
-        console.print(f"[green]Wrote {written} records to {output}[/green]")
+        if metadata_prefix == "oai_dc":
+            console.print(f"[green]Wrote {written} records to {output}[/green]")
+        else:
+            console.print(
+                f"[green]Cached {written} {metadata_prefix} records in {cache_dir}[/green]"
+            )
     if not total:
         console.print("[yellow]No data found for the provided filters.[/yellow]")
 
@@ -221,35 +134,62 @@ def oai_pmh_cmd(
 def metadata_load_cmd(
         db: Path = typer.Option(Path("data/processed/thesis.db"), "--db"),
         ids: str | None = typer.Option(None, "--ids"),
-        urls: str | None = typer.Option(None, "--urls"),
-        out_html: Path = typer.Option(Path("data/raw/items"), "--out-html"),
-        user_agent: str = typer.Option("skemman-metadata-loader", "--user-agent"),
-        delay: float = typer.Option(2.0, "--delay"),
+        oai_dir: Path = typer.Option(Path("data/raw/oai"), "--oai-dir"),
 ) -> None:
-    """Fetch or reuse Skemman item HTML and load normalized metadata into DuckDB."""
-    loaded = load_metadata(
+    """Load normalized metadata from cached OAI-PMH XML into DuckDB."""
+    loaded = load_oai_metadata(
         db=db,
         ids=ids,
-        urls=urls,
-        out_html=out_html,
-        user_agent=user_agent,
-        delay=delay,
+        oai_dir=oai_dir,
     )
     console.print(f"[green]Loaded metadata for {loaded} records.[/green]")
+
+
+@app.command(name="files-load")
+def files_load_cmd(
+        db: Path = typer.Option(Path("data/processed/thesis.db"), "--db"),
+        oai_dir: Path = typer.Option(Path("data/raw/oai"), "--oai-dir"),
+        ids: str | None = typer.Option(None, "--ids", help="Comma-separated thesis ids."),
+) -> None:
+    """Fill thesis_file from cached xoai pages. No network.
+
+    xoai lists every attached file with its size, type, download URL and the
+    description DSpace files it under, so the repository itself says which
+    attachment is the thesis and which is the declaration form. Harvest the
+    pages once with `oai-pmh --metadata-prefix xoai` -- about 66 requests for
+    the whole collection -- and this replays them offline.
+
+    It does not learn the access status: that is stated only on the item page.
+    `files-index` fetches those, one request per thesis, and is worth running
+    only where the access status actually matters.
+    """
+    theses, rows = load_files_from_xoai(db=db, oai_dir=oai_dir, ids=ids)
+    console.print(f"[green]Loaded {rows} files for {theses} theses.[/green]")
 
 
 @app.command(name="files-index")
 def files_index_cmd(
         db: Path = typer.Option(Path("data/processed/thesis.db"), "--db"),
-        items_dir: Path = typer.Option(Path("data/raw/items"), "--items-dir"),
+        ids: str | None = typer.Option(None, "--ids", help="Comma-separated thesis ids."),
+        limit: int | None = typer.Option(None, "--limit", help="Stop after N theses."),
+        config: Path = typer.Option(Path("config/collections.yaml"), "--config", "-c"),
 ) -> None:
     """Index each item's file table: name, size, access and type.
 
-    Reads the cached item HTML only, so it needs no network. Populates
-    thesis_file, which titlepage-load uses to skip closed files and to take the
-    small ones first.
+    Fetches item pages and stores only the file table. Populates thesis_file,
+    which titlepage-load uses to skip closed files and to take the small ones
+    first.
     """
-    theses, rows = load_file_index(db=db, items_dir=items_dir)
+    cfg = load_config(config)
+    theses, rows = load_file_index(
+        db=db,
+        ids=ids,
+        limit=limit,
+        base_url=cfg.get("base_url", "https://skemman.is").rstrip("/"),
+        user_agent=cfg.get("user_agent", "skemman-file-indexer"),
+        delay=float(cfg.get("request_delay_seconds", 30.0)),
+        timeout=int(cfg.get("timeout_seconds", 30)),
+    )
     console.print(f"[green]Indexed {rows} files across {theses} theses.[/green]")
 
 
@@ -258,6 +198,9 @@ def titlepage_load_cmd(
         db: Path = typer.Option(Path("data/processed/thesis.db"), "--db"),
         limit: int | None = typer.Option(None, "--limit", help="Stop after N theses."),
         ids: str | None = typer.Option(None, "--ids", help="Comma-separated thesis ids."),
+        test: bool = typer.Option(
+            False, "--test", help="Only the ids listed as test_ids in the config."
+        ),
         degree_level: str = typer.Option("master", "--degree-level"),
         pages: int | None = typer.Option(None, "--pages", help="PDF pages to keep as text."),
         text_dir: Path = typer.Option(Path("data/raw/pdf_text"), "--text-dir"),
@@ -281,6 +224,15 @@ def titlepage_load_cmd(
     is cached per thesis, so a second run re-parses without refetching. Theses
     that yield nothing are recorded in thesis_titlepage_failure and in the log.
     """
+    if test and not ids:
+        # Known theses with a known right answer. Checking a parser change
+        # against work you can read yourself catches a regression in seconds.
+        test_ids = load_config(config).get("test_ids") or []
+        if not test_ids:
+            raise typer.BadParameter(f"--test needs test_ids in {config}")
+        ids = ",".join(str(i) for i in test_ids)
+        typer.echo(f"Test ids from {config}: {ids}")
+
     processed, with_faculty, failed = load_titlepages(
         db=db,
         limit=limit,

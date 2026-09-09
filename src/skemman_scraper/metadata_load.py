@@ -10,6 +10,7 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 
+from skemman_scraper.oai_pmh import parse_oai_pmh_records
 from skemman_scraper.utils import PoliteSession
 
 if TYPE_CHECKING:
@@ -196,6 +197,14 @@ def normalise_degree(value: str | None) -> str | None:
         return "master"
     if "bachelor" in low or "b.sc" in low or "bsc" in low:
         return "bachelor"
+    # xoai states the registrar's own value, which includes two levels OAI's
+    # dc:type never names: "Doctoral", and the diplomas. Undergraduate diploma
+    # is idnfraedi and the like; graduate diploma sits beside a master's. Both
+    # land on "diploma" -- degree_raw keeps which one it was.
+    if "doctoral" in low:
+        return "phd"
+    if "diploma" in low or "diplóma" in low:
+        return "diploma"
     return None
 
 
@@ -372,6 +381,197 @@ def insert_keyword_links(
             """,
             [thesis_id, keyword_id, sort_order, thesis_id, keyword_id],
         )
+
+
+def _parse_ids(ids: str | None) -> set[int] | None:
+    if not ids:
+        return None
+    return {int(part.strip()) for part in ids.split(",") if part.strip()}
+
+
+def _pick_oai_abstract(descriptions: list[str]) -> tuple[str | None, str | None, str | None]:
+    descriptions = [cleaned for value in descriptions if (cleaned := normalise_text(value))]
+    abstract_is, descriptions = extract_icelandic_abstract(descriptions)
+    note, descriptions = extract_notes(descriptions)
+
+    icelandic = [value for value in descriptions if is_icelandic_text(value)]
+    other = [value for value in descriptions if not is_icelandic_text(value)]
+    if not abstract_is and icelandic:
+        abstract_is = icelandic[0]
+    abstract_en = other[0] if other else None
+    return abstract_is, abstract_en, note
+
+
+def _pick_oai_title(title: str | None) -> tuple[str | None, str | None]:
+    title = normalise_text(title)
+    if not title:
+        return None, None
+    if is_icelandic_text(title):
+        return title, None
+    return None, title
+
+
+def _as_str_list(value: object) -> list[str]:
+    if not value:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    return [str(value)]
+
+
+def _create_metadata_tables(con: duckdb.DuckDBPyConnection) -> None:
+    con.execute("create sequence if not exists keyword_id_seq start 1")
+    con.execute(
+        """
+        create table if not exists thesis_metadata (
+            thesis_id integer,
+            title_is varchar,
+            title_en varchar,
+            abstract_is varchar,
+            abstract_en varchar,
+            degree_level varchar,
+            thesis_type varchar,
+            sponsor varchar,
+            note varchar,
+            related_url varchar,
+            raw_keywords varchar,
+            pdf_url varchar,
+            institution varchar,
+            school varchar,
+            university varchar,
+            faculty varchar,
+            study_category varchar,
+            thesis_type_label varchar
+        )
+        """
+    )
+    con.execute(
+        """
+        create table if not exists keywords (
+            id bigint default nextval('keyword_id_seq'),
+            keyword varchar,
+            keyword_norm varchar
+        )
+        """
+    )
+    con.execute(
+        """
+        create table if not exists thesis_keywords (
+            thesis_id integer,
+            keyword_id bigint,
+            sort_order integer
+        )
+        """
+    )
+    con.execute("create unique index if not exists keywords_norm_uq on keywords (keyword_norm)")
+    con.execute(
+        "create unique index if not exists thesis_keywords_uq on thesis_keywords "
+        "(thesis_id, keyword_id)"
+    )
+
+
+def write_oai_metadata_rows(rows: list[dict[str, object]], db_path: Path) -> int:
+    import duckdb
+
+    loaded = 0
+    with duckdb.connect(str(db_path)) as con:
+        _create_metadata_tables(con)
+        for row in rows:
+            thesis_id = int(row["id"])
+            keywords = split_keywords(_as_str_list(row.get("subjects")))
+            abstract_is, abstract_en, note = _pick_oai_abstract(
+                _as_str_list(row.get("descriptions"))
+            )
+            title_is, title_en = _pick_oai_title(row.get("title"))
+            types = _as_str_list(row.get("types"))
+            degree_level = pick_degree(types)
+            thesis_type = "; ".join(normalize_thesis_types(types, degree_level)) if types else None
+            contributors = dedupe_preserve_order(_as_str_list(row.get("contributors")))
+            institution = contributors[0] if contributors else None
+            related_urls = dedupe_preserve_order(_as_str_list(row.get("relations")))
+            related_url = related_urls[0] if related_urls else None
+
+            con.execute(
+                """
+                insert into thesis_metadata (thesis_id)
+                select ?
+                where not exists (
+                    select 1
+                    from thesis_metadata
+                    where thesis_id = ?
+                )
+                """,
+                [thesis_id, thesis_id],
+            )
+            con.execute(
+                """
+                update thesis_metadata
+                set title_is = coalesce(?, title_is),
+                    title_en = coalesce(?, title_en),
+                    abstract_is = coalesce(?, abstract_is),
+                    abstract_en = coalesce(?, abstract_en),
+                    degree_level = coalesce(?, degree_level),
+                    thesis_type = coalesce(?, thesis_type),
+                    note = coalesce(?, note),
+                    related_url = coalesce(?, related_url),
+                    raw_keywords = coalesce(?, raw_keywords),
+                    institution = coalesce(?, institution),
+                    university = coalesce(?, university)
+                where thesis_id = ?
+                """,
+                [
+                    title_is,
+                    title_en,
+                    abstract_is,
+                    abstract_en,
+                    degree_level,
+                    thesis_type,
+                    note,
+                    related_url,
+                    "; ".join(keywords) if keywords else None,
+                    institution,
+                    institution,
+                    thesis_id,
+                ],
+            )
+            con.execute("delete from thesis_keywords where thesis_id = ?", [thesis_id])
+            insert_keyword_links(con, thesis_id, keywords)
+            loaded += 1
+        con.execute("checkpoint")
+    return loaded
+
+
+def load_oai_metadata(
+        db: str | Path = "data/processed/thesis.db",
+        oai_dir: str | Path = "data/raw/oai",
+        ids: str | None = None,
+        metadata_prefix: str = "oai_dc",
+) -> int:
+    import duckdb
+
+    selected_ids = _parse_ids(ids)
+    if selected_ids is None:
+        with duckdb.connect(db) as con:
+            selected_ids = {int(row[0]) for row in con.execute("select id from thesis").fetchall()}
+
+    # One directory holds every format the harvest has fetched, named by
+    # prefix: oai_dc_*.xml beside xoai_*.xml. Reading them all would parse the
+    # xoai pages with the oai_dc parser, which finds the record ids and nothing
+    # else -- harmless, because every column is written with coalesce, but it
+    # doubles the work and reports twice the records it loaded. A cache from
+    # before the names carried a prefix falls back to everything.
+    pages = sorted(Path(oai_dir).glob(f"{metadata_prefix}_*.xml"))
+    if not pages:
+        pages = sorted(Path(oai_dir).glob("*.xml"))
+
+    loaded = 0
+    for path in tqdm(pages, desc="Loading OAI metadata"):
+        page_rows, _ = parse_oai_pmh_records(path.read_text(encoding="utf-8", errors="replace"))
+        rows = [row for row in page_rows if int(row["id"]) in selected_ids]
+        if not rows:
+            continue
+        loaded += write_oai_metadata_rows(rows, Path(db))
+    return loaded
 
 
 def resolve_urls(ids: str | None, urls: str | None) -> list[str]:

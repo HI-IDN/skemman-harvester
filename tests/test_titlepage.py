@@ -1,6 +1,12 @@
 """The title page is the ground truth for faculty, credits and degree."""
 
-from skemman_scraper.titlepage_load import PAGE_MARKER, _split_marker, item_url, parse_titlepage
+from skemman_scraper.titlepage_load import (
+    PAGE_MARKER,
+    _is_stale,
+    _split_marker,
+    item_url,
+    parse_titlepage,
+)
 
 # An HI title page, as pypdf lays it out: one field per line.
 HI_PAGE = """Mid-Holocene eruptive activity in the Hekla volcanic system
@@ -80,25 +86,48 @@ class TestParseTitlepage:
 
 
 class TestSplitMarker:
-    def test_reads_the_page_count(self):
-        text, pages = _split_marker(f"{PAGE_MARKER}106\nfyrsta lina\nonnur lina")
-        assert pages == 106
+    def test_reads_both_counts(self):
+        text, pages, kept = _split_marker(
+            f"{PAGE_MARKER}106\t20\nfyrsta lina\nonnur lina"
+        )
+        assert (pages, kept) == (106, 20)
         assert text == "fyrsta lina\nonnur lina"
 
+    def test_old_marker_has_no_kept_count(self):
+        # Caches written before the second field cannot say how much was kept.
+        text, pages, kept = _split_marker(f"{PAGE_MARKER}106\nhali")
+        assert (pages, kept) == (106, None)
+        assert text == "hali"
+
     def test_scanned_pdf_has_a_count_but_no_text(self):
-        text, pages = _split_marker(f"{PAGE_MARKER}42\n")
-        assert pages == 42
+        text, pages, kept = _split_marker(f"{PAGE_MARKER}42\t20\n")
+        assert (pages, kept) == (42, 20)
         assert text == ""
 
     def test_text_without_a_marker(self):
-        text, pages = _split_marker("engin merking hér")
-        assert pages is None
+        text, pages, kept = _split_marker("engin merking hér")
+        assert pages is None and kept is None
         assert text == "engin merking hér"
 
     def test_unparseable_marker(self):
-        text, pages = _split_marker(f"{PAGE_MARKER}ekkitala\nhali")
-        assert pages is None
+        text, pages, kept = _split_marker(f"{PAGE_MARKER}ekkitala\nhali")
+        assert pages is None and kept is None
         assert text == "hali"
+
+
+class TestIsStale:
+    def test_a_short_cache_is_stale(self):
+        assert _is_stale(106, 8, 20) is True
+
+    def test_a_full_cache_is_not(self):
+        assert _is_stale(106, 20, 20) is False
+
+    def test_a_document_shorter_than_the_window_is_not(self):
+        # Six pages kept out of a six-page thesis is everything there is.
+        assert _is_stale(6, 6, 20) is False
+
+    def test_an_old_cache_is_stale_because_it_cannot_say(self):
+        assert _is_stale(106, None, 20) is True
 
 
 def test_item_url_matches_the_handle():
