@@ -1,0 +1,12 @@
+# Skemman simple-search settings.
+base_url: "https://skemman.is"
+user_agent: "skemman-scraper/0.1 research crawler; contact: replace-with-email@example.com"
+request_delay_seconds: 2.0
+timeout_seconds: 30
+
+year_start: 2010
+year_end: 2026
+
+handles:
+  HI: "1946/2064"
+  HR: "1946/6870"

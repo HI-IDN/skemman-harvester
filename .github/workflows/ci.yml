@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor is what pyproject declares; the ceiling is what the project
+        # is developed on.
+        python-version: ["3.10", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check src tests
+
+      # `ruff format --check` is deliberately not run yet: the existing code
+      # predates it and a one-off reformat would bury real changes in noise.
+      # Run `ruff format src tests` once, then add the check here.
+
+      # The scraper is the part that can be reused elsewhere, so it is the part
+      # that is tested. The tests are pure parsing: no network, no database.
+      - name: Test
+        run: pytest tests -q

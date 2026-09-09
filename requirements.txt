@@ -1,0 +1,12 @@
+beautifulsoup4>=4.12
+requests>=2.31
+pandas>=2.2
+pyarrow>=15
+pypdf>=6.0
+cryptography>=3.1
+pyyaml>=6.0
+tqdm>=4.66
+typer>=0.12
+rich>=13.7
+duckdb>=1.0
+-e .

@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "skemman-harvester"
+version = "0.1.0"
+description = "Harvest Icelandic thesis records from Skemman into DuckDB"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Helga Ingimundardóttir" }]
+dependencies = [
+    "beautifulsoup4>=4.12",
+    "requests>=2.31",
+    "pandas>=2.2",
+    "pyarrow>=15",
+    "pypdf>=6.0",
+    "cryptography>=3.1",
+    "pyyaml>=6.0",
+    "tqdm>=4.66",
+    "typer>=0.12",
+    "rich>=13.7",
+    "duckdb>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "ipykernel>=6.29",
+]
+
+[project.urls]
+Homepage = "https://github.com/HI-IDN/skemman-harvester"
+Issues = "https://github.com/HI-IDN/skemman-harvester/issues"
+
+[project.scripts]
+skemman = "skemman_scraper.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+# typer.Option() in an argument default is how Typer declares CLI options.
+# B008 flags it as a call in a default, which is exactly what it is meant to be.
+"src/skemman_scraper/cli.py" = ["B008"]

@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+.env/
+
+# Packaging/build
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Test/coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Type checkers/linters
+.mypy_cache/
+.ruff_cache/
+.pytype/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Project data/output
+outputs/
+data/processed/
+data/raw/
+
+# Planned home for the tracked database snapshot, as per-table Parquet
+# (scripts/export_db.sql writes it, scripts/restore_db.sql reads it back).
+# Ignored for now -- committing it is a deliberate decision, not a side effect
+# of running the export. Remove this line when that decision is made.
+data/db/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE settings
+.vscode/
+.idea/
+
+# Quarto
+/docs/
+/.quarto/
+/_freeze/
+*_files/
+*.quarto_ipynb
+
+**/*.quarto_ipynb
+*.knit.md
+logs/
