@@ -59,6 +59,7 @@ def oai_pmh_cmd(
         year_end: int | None = typer.Option(None, "--year-end"),
         metadata_prefix: str = typer.Option("oai_dc", "--metadata-prefix"),
         paginate: bool = typer.Option(True, "--paginate/--no-paginate"),
+        cache_dir: Path | None = typer.Option(Path("data/raw/oai"), "--cache-dir"),
         output: Path = typer.Option(Path("data/processed/thesis.db"), "--output", "-o"),
         config: Path = typer.Option(Path("config/collections.yaml"), "--config", "-c"),
 ) -> None:
@@ -75,6 +76,7 @@ def oai_pmh_cmd(
         year_end=year_end,
         metadata_prefix=metadata_prefix,
         paginate=paginate,
+        cache_dir=cache_dir,
     )
     if df.empty:
         console.print("[yellow]No data found for the provided filters.[/yellow]")

@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
 
@@ -144,6 +145,7 @@ def harvest_oai_pmh(
         year_end: int | None,
         metadata_prefix: str = "oai_dc",
         paginate: bool = True,
+        cache_dir: Path | None = Path("data/raw/oai"),
 ) -> pd.DataFrame:
     base_url = config["base_url"].rstrip("/")
     target_set = set_spec or (set_spec_from_location(location) if location else None)
@@ -151,7 +153,7 @@ def harvest_oai_pmh(
         user_agent=config["user_agent"],
         delay_seconds=float(config.get("request_delay_seconds", 30.0)),
         timeout_seconds=int(config.get("timeout_seconds", 30)),
-        cache_dir=None,
+        cache_dir=cache_dir,
     )
 
     rows: list[dict[str, Any]] = []
@@ -167,7 +169,7 @@ def harvest_oai_pmh(
 
     with tqdm(desc=" ".join(desc_parts), unit="page") as progress:
         while target_url:
-            xml = session.get_text(target_url, use_cache=False)
+            xml = session.get_text(target_url, use_cache=True)
             page_rows, next_token = parse_oai_pmh_records(xml)
             rows.extend(page_rows)
             progress.update(1)

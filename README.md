@@ -63,6 +63,8 @@ skemman oai-pmh --location 1946/2064 --year-start 2010 --year-end 2026
 
 Collection handles map to Skemman's OAI-PMH community sets, so `1946/2064` becomes
 `com_1946_2064`. Use `--set` directly to harvest a specific OAI-PMH set.
+OAI-PMH XML pages are cached under `data/raw/oai/`, so re-running the same harvest does
+not wait through the network delay again.
 
 ### 2. `metadata-load` — the item pages
 

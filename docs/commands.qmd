@@ -20,6 +20,7 @@ skemman oai-pmh --location 1946/2064 --year-start 2010 --year-end 2026
 | `--year-start` | First `dc:date` year to keep. |
 | `--year-end` | Last `dc:date` year to keep. |
 | `--metadata-prefix` | OAI-PMH metadata prefix. Default `oai_dc`. |
+| `--cache-dir` | Cache directory for OAI-PMH XML pages. Default `data/raw/oai`. |
 | `--output`, `-o` | Database path. |
 
 Re-running a set picks up newly deposited theses; existing ids are left alone.
