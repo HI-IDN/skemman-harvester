@@ -44,12 +44,12 @@ _PREFIXED = {
 
 # An Icelandic unit name: "Umhverfis- og byggingarverkfraedideild".
 _DEILD = re.compile(
-    r"(?i)^([A-ZÁÉÍÓÚÝÞÆÖ][A-Za-zÁÉÍÓÚÝÞÆÖáéíóúýþæö\-]{2,}"
-    r"(?:[-\s]og[-\s][A-Za-zÁÉÍÓÚÝÞÆÖáéíóúýþæö\-]+)*deild)\s*$"
+    r"(?i)^([A-ZÁÉÍÓÚÝÞÆÖÐ][A-Za-zÁÉÍÓÚÝÞÆÖÐáéíóúýþæöð\-]{2,}"
+    r"(?:[-\s]og[-\s][A-Za-zÁÉÍÓÚÝÞÆÖÐáéíóúýþæöð\-]+)*deild)\s*$"
 )
 _SVID = re.compile(
-    r"(?i)^([A-ZÁÉÍÓÚÝÞÆÖ][A-Za-zÁÉÍÓÚÝÞÆÖáéíóúýþæö\-]{2,}"
-    r"(?:[-\s]og[-\s][A-Za-zÁÉÍÓÚÝÞÆÖáéíóúýþæö\-]+)*svið)\s*$"
+    r"(?i)^([A-ZÁÉÍÓÚÝÞÆÖÐ][A-Za-zÁÉÍÓÚÝÞÆÖÐáéíóúýþæöð\-]{2,}"
+    r"(?:[-\s]og[-\s][A-Za-zÁÉÍÓÚÝÞÆÖÐáéíóúýþæöð\-]+)*svið)\s*$"
 )
 
 _ECTS = re.compile(r"(?i)\b(\d{1,3})\s*ECTS\b")
@@ -58,9 +58,9 @@ _DEGREE = re.compile(
     r"Master of Engineering|Master of Project Management|Magister Paedagogiae)\b"
 )
 # English "degree in X" and Icelandic "meistaraprofs (MSc) i X".
-_SUBJECT_EN = re.compile(r"(?i)\bdegree in\s+([A-Za-zÁÉÍÓÚÝÞÆÖáéíóúýþæö&,\- ]{3,60})")
+_SUBJECT_EN = re.compile(r"(?i)\bdegree in\s+([A-Za-zÁÉÍÓÚÝÞÆÖÐáéíóúýþæöð&,\- ]{3,60})")
 _SUBJECT_IS = re.compile(
-    r"(?i)meistarapr[óo]fs?\s*(?:\([^)]*\))?\s*í\s+([A-Za-zÁÉÍÓÚÝÞÆÖáéíóúýþæö&,\- ]{3,60})"
+    r"(?i)meistarapr[óo]fs?\s*(?:\([^)]*\))?\s*í\s+([A-Za-zÁÉÍÓÚÝÞÆÖÐáéíóúýþæöð&,\- ]{3,60})"
 )
 _YEAR = re.compile(r"\b((?:19|20)\d{2})\b")
 
@@ -340,7 +340,7 @@ def load_titlepages(
     pdf_dir.mkdir(parents=True, exist_ok=True)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log = log_path.open("a", encoding="utf-8")
-    log.write("# run {:%Y-%m-%d %H:%M:%S}\n".format(datetime.now()))
+    log.write(f"# run {datetime.now():%Y-%m-%d %H:%M:%S}\n")
 
     with duckdb.connect(str(db)) as con:
         _create_table(con)

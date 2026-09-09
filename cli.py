@@ -8,8 +8,8 @@ import typer
 from rich.console import Console
 
 from .config import load_config
-from .metadata_load import clean_people_table, load_metadata
 from .files_index import load_file_index
+from .metadata_load import clean_people_table, load_metadata
 from .simple_search import harvest_simple_search
 from .titlepage_load import load_titlepages
 

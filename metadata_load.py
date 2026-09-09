@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import argparse
 import re
+from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
@@ -214,7 +215,7 @@ def parse_person_name(text: str) -> tuple[str, int | None, int | None]:
 
 
 def ensure_person(
-        con: "duckdb.DuckDBPyConnection",
+        con: duckdb.DuckDBPyConnection,
         name: str,
         year_born: int | None,
         year_died: int | None,
@@ -301,7 +302,7 @@ def keyword_norm(value: str) -> str:
 
 
 def ensure_keyword(
-        con: "duckdb.DuckDBPyConnection",
+        con: duckdb.DuckDBPyConnection,
         keyword: str,
 ) -> int:
     norm = keyword_norm(keyword)
@@ -320,7 +321,7 @@ def ensure_keyword(
 
 
 def insert_people_links(
-        con: "duckdb.DuckDBPyConnection",
+        con: duckdb.DuckDBPyConnection,
         thesis_id: int,
         people: Iterable[tuple[str, int | None, int | None]],
         role: str,
@@ -348,7 +349,7 @@ def insert_people_links(
 
 
 def insert_keyword_links(
-        con: "duckdb.DuckDBPyConnection",
+        con: duckdb.DuckDBPyConnection,
         thesis_id: int,
         keywords: Iterable[str],
 ) -> None:
