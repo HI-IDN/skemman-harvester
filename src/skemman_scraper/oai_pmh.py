@@ -9,7 +9,6 @@ from urllib.parse import urlencode
 import pandas as pd
 from tqdm import tqdm
 
-from .simple_search import _normalize_location
 from .utils import PoliteSession
 
 OAI_NS = "http://www.openarchives.org/OAI/2.0/"
@@ -23,6 +22,15 @@ class OaiRecord:
     date_accepted: str | None
     title: str | None
     authors: str | None
+
+
+def _normalize_location(location: str) -> str:
+    value = location.strip()
+    if "/" in value:
+        return value
+    if " " in value:
+        return "/".join(part for part in value.split() if part)
+    return value
 
 
 def set_spec_from_location(location: str) -> str:

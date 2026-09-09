@@ -30,8 +30,8 @@ skemman titlepage-load --degree-level master
 
 > [!WARNING]
 > `oai-pmh` lists records through `/oai/request`, the standard repository-harvesting
-> interface. The legacy `simple-search` command remains for comparison, but it builds URLs
-> under `/simple-search`, which [robots.txt](https://skemman.is/robots.txt) disallows. See
+> interface. The old `/simple-search` listing path is intentionally not used because
+> [robots.txt](https://skemman.is/robots.txt) disallows it. See
 > [Crawling etiquette](https://hi-idn.github.io/skemman-harvester/etiquette.html).
 
 ## Install

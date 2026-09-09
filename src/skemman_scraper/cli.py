@@ -11,7 +11,6 @@ from .config import load_config
 from .files_index import load_file_index
 from .metadata_load import clean_people_table, load_metadata
 from .oai_pmh import harvest_oai_pmh, set_spec_from_location
-from .simple_search import harvest_simple_search
 from .titlepage_load import load_titlepages
 
 app = typer.Typer(help="Skemman thesis metadata loader")
@@ -50,37 +49,6 @@ def write_thesis_rows(df: pd.DataFrame, db_path: Path) -> None:
             where t.id is null
             """
         )
-
-
-@app.command(name="simple-search")
-def simple_search_cmd(
-        url: str | None = typer.Option(None, "--url"),
-        location: str | None = typer.Option(None, "--location", "-l"),
-        year: int | None = typer.Option(None, "--year", "-y"),
-        rpp: int = typer.Option(25, "--rpp"),
-        paginate: bool = typer.Option(True, "--paginate/--no-paginate"),
-        output: Path = typer.Option(Path("data/processed/thesis.db"), "--output", "-o"),
-        config: Path = typer.Option(Path("config/collections.yaml"), "--config", "-c"),
-) -> None:
-    """Scrape Skemman simple-search listing rows into DuckDB."""
-    cfg = load_config(config)
-    if not url and not location:
-        raise typer.BadParameter("Provide either --url or --location.")
-    df = harvest_simple_search(
-        cfg,
-        url=url,
-        location=location,
-        year=year,
-        rpp=rpp,
-        paginate=paginate,
-    )
-    if df.empty:
-        console.print("[yellow]No data found for the provided filters.[/yellow]")
-        return
-    write_thesis_rows(df, output)
-    if "source_url" in df.columns:
-        console.print(f"[blue]Source URL: {df['source_url'].iloc[0]}[/blue]")
-    console.print(f"[green]Wrote {len(df)} records to {output}[/green]")
 
 
 @app.command(name="oai-pmh")
