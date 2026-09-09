@@ -8,7 +8,7 @@ Every fetch is cached, and the cache is the reason a re-run is cheap.
 
 | Path | What | Size |
 | --- | --- | --- |
-| `data/raw/oai/` | OAI-PMH listing XML, by set and page offset | one XML page per OAI-PMH page |
+| `data/raw/oai/` | OAI-PMH XML with listings, keywords and abstracts, by set and page offset | one XML page per OAI-PMH page |
 | `data/raw/oai/*.checkpoint.json` | Next OAI-PMH resumption token for an interrupted full run | one tiny JSON file per active set |
 | `data/raw/items/<id>.html` | Skemman item page | ~30 KB each |
 | `data/raw/pdf_text/<id>.txt` | First pages of the PDF, as plain text | ~5 KB each |
@@ -17,15 +17,20 @@ Every fetch is cached, and the cache is the reason a re-run is cheap.
 `<id>` is the Skemman handle suffix throughout, so `data/raw/pdf_text/25337.txt`,
 `data/raw/items/25337.html` and <https://skemman.is/handle/1946/25337> are the same thesis.
 
-OAI-PMH listing pages use readable XML filenames such as
-`oai_dc_com_1946_2064_000000.xml`. Re-running the same `skemman oai-pmh` command reuses
-those XML pages rather than waiting through the request delay again.
+OAI-PMH pages use readable XML filenames such as `oai_dc_com_1946_2064_000000.xml`.
+Re-running the same `skemman oai-pmh` command reuses those XML pages rather than waiting
+through the request delay again. These pages include `dc:subject` keywords and
+`dc:description` abstracts, so the OAI step can preload them before item pages are fetched.
 
 During a full paginated OAI-PMH run, the harvester also writes a checkpoint file such as
 `oai_dc_com_1946_2064.checkpoint.json`. It stores the next resumption token only after the
 current page's rows have been written to DuckDB, so an interrupted run resumes without
 skipping a page. The file is deleted when the set finishes. Runs with `--limit` are treated
 as quick checks and do not update the checkpoint.
+
+The item-page cache is still separate because OAI-PMH does not include the Skemman file
+table. `data/raw/items/<id>.html` is what `files-index` reads to find PDF URLs, file sizes
+and access status.
 
 ## Why text and not the PDF
 

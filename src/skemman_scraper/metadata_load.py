@@ -609,12 +609,18 @@ def load_metadata(
                          left join thesis_metadata m
                                    on m.thesis_id = v.id
                 where m.thesis_id is null
+                   or (
+                       m.institution is null
+                       and m.school is null
+                       and m.study_category is null
+                       and m.pdf_url is null
+                   )
                 order by v.id
                 """
             ).fetchall()
 
             item_urls = [row[0] for row in rows]
-            print(f"Found {len(item_urls)} thesis ids missing metadata.")
+            print(f"Found {len(item_urls)} thesis ids missing item-page metadata.")
 
     if not item_urls:
         raise SystemExit("Provide --ids or --urls.")

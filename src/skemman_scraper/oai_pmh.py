@@ -186,12 +186,16 @@ def parse_oai_pmh_records(xml: str) -> tuple[list[dict[str, Any]], str | None]:
         dc_date = _normalise_dc_date((_dc_values(record, "date") or [None])[0])
         title = (_dc_values(record, "title") or [None])[0]
         creators = _dc_values(record, "creator")
+        subjects = _dc_values(record, "subject")
+        descriptions = _dc_values(record, "description")
         rows.append(
             {
                 "id": thesis_id,
                 "date_accepted": dc_date,
                 "title": title,
                 "authors": "; ".join(creators) if creators else None,
+                "subjects": subjects,
+                "descriptions": descriptions,
             }
         )
 

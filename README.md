@@ -55,7 +55,8 @@ Each is resumable and each caches what it fetches.
 
 ### 1. `oai-pmh` — what exists
 
-Reads a collection's OAI-PMH set into the `thesis` table.
+Reads a collection's OAI-PMH set into the `thesis`, `thesis_metadata`, and keyword
+tables.
 
 ```bash
 skemman oai-pmh
@@ -71,11 +72,15 @@ next resumption token; after each page is written to DuckDB, the checkpoint adva
 harvest is interrupted, the next run continues from that token. `--limit` test runs do not
 write a checkpoint.
 
+The OAI XML includes `dc:subject` and `dc:description`, so `oai-pmh` also preloads
+keywords and abstracts. Item pages are still used for page-only details such as advisor
+metadata, breadcrumbs, PDF URLs, and the attached-file table.
+
 ### 2. `metadata-load` — the item pages
 
-Fetches each item page and parses it into normalized tables: titles, abstracts, degree
-level, keywords, authors and advisors. Raw HTML is cached under `data/raw/items/`, so a
-re-run reuses it.
+Fetches each item page and parses page-only details into normalized tables: degree level,
+advisors, breadcrumbs, PDF URLs, and other metadata that OAI-PMH does not expose. Raw HTML
+is cached under `data/raw/items/`, so a re-run reuses it.
 
 ```bash
 skemman metadata-load

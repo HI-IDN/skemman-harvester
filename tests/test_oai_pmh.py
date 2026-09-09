@@ -24,6 +24,9 @@ OAI_PAGE = """<?xml version="1.0" encoding="UTF-8"?>
           <dc:title>QM/MM studies of molybdenum and vanadium nitrogenase</dc:title>
           <dc:creator>Barði Benediktsson 1992-</dc:creator>
           <dc:creator>Annar Höfundur</dc:creator>
+          <dc:subject>Nitrogenase</dc:subject>
+          <dc:subject>Meistaraprófsritgerðir</dc:subject>
+          <dc:description>English abstract text.</dc:description>
           <dc:date>2018-05</dc:date>
           <dc:identifier>http://hdl.handle.net/1946/30550</dc:identifier>
         </oai_dc:dc>
@@ -95,5 +98,7 @@ def test_parses_records_and_resumption_token():
             "date_accepted": "2018-05-01",
             "title": "QM/MM studies of molybdenum and vanadium nitrogenase",
             "authors": "Barði Benediktsson 1992-; Annar Höfundur",
+            "subjects": ["Nitrogenase", "Meistaraprófsritgerðir"],
+            "descriptions": ["English abstract text."],
         }
     ]

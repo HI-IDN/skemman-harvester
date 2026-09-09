@@ -10,7 +10,16 @@ from rich.console import Console
 
 from .config import load_config
 from .files_index import load_file_index
-from .metadata_load import clean_people_table, load_metadata
+from .metadata_load import (
+    clean_people_table,
+    extract_icelandic_abstract,
+    extract_notes,
+    insert_keyword_links,
+    is_icelandic_text,
+    load_metadata,
+    normalise_text,
+    split_keywords,
+)
 from .oai_pmh import harvest_oai_pmh, set_spec_from_location
 from .titlepage_load import load_titlepages
 
@@ -52,6 +61,100 @@ def write_thesis_rows(df: pd.DataFrame, db_path: Path) -> None:
         )
 
 
+def _pick_oai_abstract(descriptions: list[str]) -> tuple[str | None, str | None, str | None]:
+    descriptions = [cleaned for value in descriptions if (cleaned := normalise_text(value))]
+    abstract_is, descriptions = extract_icelandic_abstract(descriptions)
+    note, descriptions = extract_notes(descriptions)
+
+    icelandic = [value for value in descriptions if is_icelandic_text(value)]
+    other = [value for value in descriptions if not is_icelandic_text(value)]
+    if not abstract_is and icelandic:
+        abstract_is = icelandic[0]
+    abstract_en = other[0] if other else None
+    return abstract_is, abstract_en, note
+
+
+def write_oai_metadata_rows(rows: list[dict[str, Any]], db_path: Path) -> None:
+    with duckdb.connect(str(db_path)) as con:
+        con.execute("create sequence if not exists keyword_id_seq start 1")
+        con.execute(
+            """
+            create table if not exists thesis_metadata (
+                thesis_id integer,
+                title_is varchar,
+                title_en varchar,
+                abstract_is varchar,
+                abstract_en varchar,
+                degree_level varchar,
+                thesis_type varchar,
+                sponsor varchar,
+                note varchar,
+                related_url varchar,
+                raw_keywords varchar,
+                pdf_url varchar,
+                institution varchar,
+                school varchar,
+                university varchar,
+                faculty varchar,
+                study_category varchar,
+                thesis_type_label varchar
+            )
+            """
+        )
+        con.execute(
+            """
+            create table if not exists keywords (
+                id bigint default nextval('keyword_id_seq'),
+                keyword varchar,
+                keyword_norm varchar
+            )
+            """
+        )
+        con.execute(
+            """
+            create table if not exists thesis_keywords (
+                thesis_id integer,
+                keyword_id bigint,
+                sort_order integer
+            )
+            """
+        )
+        con.execute("create unique index if not exists keywords_norm_uq on keywords (keyword_norm)")
+        con.execute(
+            "create unique index if not exists thesis_keywords_uq on thesis_keywords "
+            "(thesis_id, keyword_id)"
+        )
+
+        for row in rows:
+            thesis_id = int(row["id"])
+            keywords = split_keywords(row.get("subjects", []))
+            abstract_is, abstract_en, note = _pick_oai_abstract(row.get("descriptions", []))
+            con.execute(
+                """
+                insert into thesis_metadata (thesis_id,
+                                             abstract_is,
+                                             abstract_en,
+                                             note,
+                                             raw_keywords)
+                select ?, ?, ?, ?, ?
+                where not exists (
+                    select 1
+                    from thesis_metadata
+                    where thesis_id = ?
+                )
+                """,
+                [
+                    thesis_id,
+                    abstract_is,
+                    abstract_en,
+                    note,
+                    "; ".join(keywords) if keywords else None,
+                    thesis_id,
+                ],
+            )
+            insert_keyword_links(con, thesis_id, keywords)
+
+
 @app.command(name="oai-pmh")
 def oai_pmh_cmd(
         location: str | None = typer.Option(None, "--location", "-l"),
@@ -88,6 +191,7 @@ def oai_pmh_cmd(
             if not page_rows:
                 return
             write_thesis_rows(pd.DataFrame(page_rows), output)
+            write_oai_metadata_rows(page_rows, output)
             written += len(page_rows)
 
         df = harvest_oai_pmh(
