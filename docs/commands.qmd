@@ -28,7 +28,7 @@ Re-running a year picks up newly deposited theses; existing ids are left alone.
 Fetches each item page and parses it.
 
 ```bash
-skemman metadata-load --ids 4445,25337
+skemman metadata-load --ids 25337
 ```
 
 | Option | Meaning |

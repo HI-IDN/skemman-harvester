@@ -72,6 +72,20 @@ What the title page itself states.
 `n_pages` is the only field that is essentially always present: it comes from the PDF
 structure rather than from parsing text.
 
+A real row, [thesis 25337](https://skemman.is/handle/1946/25337):
+
+```sql
+select faculty, school, n_pages from thesis_titlepage where thesis_id = 25337;
+```
+
+| faculty | school | n_pages |
+| --- | --- | --- |
+| Industrial Eng., Mechanical Eng. and Computer Science | Engineering and Natural Sciences | 265 |
+
+Note what is missing: `ects`, `degree` and `advisors` are all null. That thesis is a
+doctoral one, and a doctoral title page states none of them. Fields are absent when the
+document does not say, not when parsing failed.
+
 ### `thesis_titlepage_failure`
 
 Why a thesis produced nothing.

@@ -12,8 +12,8 @@ Every fetch is cached, and the cache is the reason a re-run is cheap.
 | `data/raw/pdf_text/<id>.txt` | First pages of the PDF, as plain text | ~5 KB each |
 | `data/raw/pdfs/<id>.pdf` | Only with `--keep-pdf` | megabytes |
 
-`<id>` is the Skemman handle suffix throughout, so `data/raw/pdf_text/10688.txt`,
-`data/raw/items/10688.html` and <https://skemman.is/handle/1946/10688> are the same thesis.
+`<id>` is the Skemman handle suffix throughout, so `data/raw/pdf_text/25337.txt`,
+`data/raw/items/25337.html` and <https://skemman.is/handle/1946/25337> are the same thesis.
 
 ## Why text and not the PDF
 
@@ -29,10 +29,19 @@ again from Skemman if you need it.
 The first line of each text file is a marker holding the PDF's page count:
 
 ```
-%%PAGES	106
-Mid-Holocene eruptive activity in the Hekla volcanic system
+%%PAGES	265
+Faculty of Industrial Eng., Mechanical Eng. and Computer Science
+University of Iceland
+2016
+ALICE: Analysis & Learning
+Iterative Consecutive Executions
+Helga Ingimundardóttir
 ...
 ```
+
+That is the real first lines of `data/raw/pdf_text/25337.txt`, from
+[thesis 25337](https://skemman.is/handle/1946/25337). Everything the parser reads is
+there: the faculty, the school, the year and the title.
 
 Without it, deleting the PDF would throw away how long the thesis was. With it, the number
 survives in five bytes.
