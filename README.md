@@ -66,7 +66,10 @@ Collection handles map to Skemman's OAI-PMH community sets, so `1946/2064` becom
 `config/collections.yaml`. Use `--set` directly to harvest a specific OAI-PMH set.
 OAI-PMH XML pages are cached under `data/raw/oai/` with readable names such as
 `oai_dc_com_1946_2064_000000.xml`, so re-running the same harvest does not wait through
-the network delay again.
+the network delay again. Full paginated runs also keep a tiny checkpoint file with the
+next resumption token; after each page is written to DuckDB, the checkpoint advances. If a
+harvest is interrupted, the next run continues from that token. `--limit` test runs do not
+write a checkpoint.
 
 ### 2. `metadata-load` — the item pages
 

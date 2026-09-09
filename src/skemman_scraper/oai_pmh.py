@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -73,6 +75,45 @@ def oai_cache_path(
 ) -> Path:
     stem = f"{_safe_cache_part(metadata_prefix)}_{_safe_cache_part(set_spec)}_{offset:06d}"
     return cache_dir / f"{stem}.xml"
+
+
+def oai_checkpoint_path(
+        cache_dir: Path,
+        *,
+        metadata_prefix: str,
+        set_spec: str | None,
+) -> Path:
+    stem = f"{_safe_cache_part(metadata_prefix)}_{_safe_cache_part(set_spec)}"
+    return cache_dir / f"{stem}.checkpoint.json"
+
+
+def _load_checkpoint(path: Path, *, context: dict[str, Any]) -> tuple[str | None, int]:
+    if not path.exists():
+        return None, 0
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if data.get("context") != context:
+        return None, 0
+    token = data.get("resumption_token")
+    offset = int(data.get("offset", 0))
+    return token, offset
+
+
+def _save_checkpoint(
+        path: Path,
+        *,
+        resumption_token: str,
+        offset: int,
+        context: dict[str, Any],
+) -> None:
+    path.write_text(
+        json.dumps(
+            {"resumption_token": resumption_token, "offset": offset, "context": context},
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 def _offset_from_resumption_token(token: str | None, fallback: int) -> int:
@@ -158,6 +199,23 @@ def parse_oai_pmh_records(xml: str) -> tuple[list[dict[str, Any]], str | None]:
     return rows, token
 
 
+def _filter_rows_by_year(
+        rows: list[dict[str, Any]],
+        *,
+        year_start: int | None,
+        year_end: int | None,
+) -> list[dict[str, Any]]:
+    if year_start is None and year_end is None:
+        return rows
+    start = year_start if year_start is not None else -9999
+    end = year_end if year_end is not None else 9999
+    return [
+        row
+        for row in rows
+        if (year := _date_year(row.get("date_accepted"))) is not None and start <= year <= end
+    ]
+
+
 def harvest_oai_pmh(
         config: dict,
         *,
@@ -169,6 +227,8 @@ def harvest_oai_pmh(
         paginate: bool = True,
         cache_dir: Path | None = Path("data/raw/oai"),
         limit: int | None = None,
+        on_page: Callable[[list[dict[str, Any]]], None] | None = None,
+        checkpoint_context: dict[str, Any] | None = None,
 ) -> pd.DataFrame:
     base_url = config["base_url"].rstrip("/")
     target_set = set_spec or (set_spec_from_location(location) if location else None)
@@ -182,12 +242,29 @@ def harvest_oai_pmh(
         cache_dir.mkdir(parents=True, exist_ok=True)
 
     rows: list[dict[str, Any]] = []
-    next_token: str | None = None
-    offset = 0
-    target_url = build_oai_pmh_url(
-        base_url,
-        metadata_prefix=metadata_prefix,
-        set_spec=target_set,
+    resume_context = {
+        "year_start": year_start,
+        "year_end": year_end,
+        **(checkpoint_context or {}),
+    }
+    checkpoint_path = (
+        oai_checkpoint_path(cache_dir, metadata_prefix=metadata_prefix, set_spec=target_set)
+        if cache_dir and paginate and limit is None and on_page is not None
+        else None
+    )
+    next_token, offset = (
+        _load_checkpoint(checkpoint_path, context=resume_context)
+        if checkpoint_path
+        else (None, 0)
+    )
+    target_url = (
+        build_oai_pmh_url(base_url, resumption_token=next_token)
+        if next_token
+        else build_oai_pmh_url(
+            base_url,
+            metadata_prefix=metadata_prefix,
+            set_spec=target_set,
+        )
     )
     desc_parts = ["oai-pmh"]
     if target_set:
@@ -212,26 +289,32 @@ def harvest_oai_pmh(
                 if cache_path:
                     cache_path.write_text(xml, encoding="utf-8")
             page_rows, next_token = parse_oai_pmh_records(xml)
+            page_rows = _filter_rows_by_year(
+                page_rows,
+                year_start=year_start,
+                year_end=year_end,
+            )
+            if limit is not None:
+                page_rows = page_rows[: max(limit - len(rows), 0)]
+            if on_page:
+                on_page(page_rows)
             rows.extend(page_rows)
             progress.update(1)
             progress.set_postfix(records=len(rows), page_records=len(page_rows))
             if limit is not None and len(rows) >= limit:
                 break
             if not paginate or not next_token:
+                if checkpoint_path and checkpoint_path.exists():
+                    checkpoint_path.unlink()
                 break
             offset = _offset_from_resumption_token(next_token, offset + 1)
+            if checkpoint_path:
+                _save_checkpoint(
+                    checkpoint_path,
+                    resumption_token=next_token,
+                    offset=offset,
+                    context=resume_context,
+                )
             target_url = build_oai_pmh_url(base_url, resumption_token=next_token)
-
-    if year_start is not None or year_end is not None:
-        start = year_start if year_start is not None else -9999
-        end = year_end if year_end is not None else 9999
-        rows = [
-            row
-            for row in rows
-            if (year := _date_year(row.get("date_accepted"))) is not None and start <= year <= end
-        ]
-
-    if limit is not None:
-        rows = rows[:limit]
 
     return pd.DataFrame(rows)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import duckdb
 import pandas as pd
@@ -80,6 +81,15 @@ def oai_pmh_cmd(
     total = 0
     for target_location, target_set_arg in targets:
         target_set = target_set_arg or set_spec_from_location(target_location or "")
+        written = 0
+
+        def write_page(page_rows: list[dict[str, Any]]) -> None:
+            nonlocal written
+            if not page_rows:
+                return
+            write_thesis_rows(pd.DataFrame(page_rows), output)
+            written += len(page_rows)
+
         df = harvest_oai_pmh(
             cfg,
             location=target_location,
@@ -90,14 +100,15 @@ def oai_pmh_cmd(
             paginate=paginate,
             cache_dir=cache_dir,
             limit=limit,
+            on_page=write_page,
+            checkpoint_context={"output": str(output.resolve())},
         )
-        if df.empty:
+        if not written and df.empty:
             console.print(f"[yellow]No data found for OAI-PMH set {target_set}.[/yellow]")
             continue
-        write_thesis_rows(df, output)
-        total += len(df)
+        total += written
         console.print(f"[blue]OAI-PMH set: {target_set}[/blue]")
-        console.print(f"[green]Wrote {len(df)} records to {output}[/green]")
+        console.print(f"[green]Wrote {written} records to {output}[/green]")
     if not total:
         console.print("[yellow]No data found for the provided filters.[/yellow]")
 

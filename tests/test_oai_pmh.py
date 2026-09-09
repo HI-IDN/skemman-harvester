@@ -3,6 +3,7 @@ from pathlib import Path
 from skemman_scraper.oai_pmh import (
     build_oai_pmh_url,
     oai_cache_path,
+    oai_checkpoint_path,
     parse_oai_pmh_records,
     set_spec_from_location,
 )
@@ -75,6 +76,14 @@ def test_oai_cache_path_sanitizes_set_name():
         set_spec="1946/2064",
         offset=0,
     ) == Path("cache/oai_dc_1946_2064_000000.xml")
+
+
+def test_oai_checkpoint_path_uses_set_name():
+    assert oai_checkpoint_path(
+        Path("cache"),
+        metadata_prefix="oai_dc",
+        set_spec="com_1946_2064",
+    ) == Path("cache/oai_dc_com_1946_2064.checkpoint.json")
 
 
 def test_parses_records_and_resumption_token():
