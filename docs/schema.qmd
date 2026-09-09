@@ -1,0 +1,86 @@
+---
+title: "Database schema"
+---
+
+Every command writes to the same DuckDB file. Tables are separated by where their contents
+came from, so it stays visible what is Skemman's word and what is the document's.
+
+## From the search listing
+
+### `thesis`
+
+| Column | Source |
+| --- | --- |
+| `id` | Handle suffix from `/handle/1946/<id>` |
+| `date_accepted` | First listing column, `DD.MM.YYYY` |
+| `title` | Result link text |
+| `authors` | Third listing column |
+
+`v_thesis` adds `item_url`, the canonical handle URL.
+
+## From the item page
+
+### `thesis_metadata`
+
+One row per thesis. Titles and abstracts in both languages where present, plus
+`degree_level` (normalized to `bachelor`, `master`, `phd`), `thesis_type`, `sponsor`,
+`note`, `related_url`, `raw_keywords`, `pdf_url`, and the breadcrumb trail as
+`university`, `school`, `study_category`.
+
+### `people`, `thesis_people`
+
+Authors and advisors, deduplicated by name and birth year. The link table carries `role`
+(`author` or `advisor`) and source order.
+
+### `keywords`, `thesis_keywords`
+
+Keywords split on semicolons and commas, deduplicated case-insensitively.
+
+### `thesis_file`
+
+One row per attached file, from `files-index`.
+
+| Column | Meaning |
+| --- | --- |
+| `filename` | As shown on the item page |
+| `size_label` | The label, e.g. `86,08 MB` |
+| `size_bytes` | Parsed to bytes |
+| `access` | `Opinn`, `Lokaður`, or `Lokaður til...<date>` |
+| `filetype` | `PDF`, and so on |
+| `url` | Absolute bitstream URL |
+
+This table is what plans the download queue.
+
+## From the document
+
+### `thesis_titlepage`
+
+What the title page itself states.
+
+| Column | Meaning |
+| --- | --- |
+| `faculty`, `school`, `department` | As printed, English pages |
+| `deild`, `svid` | As printed, Icelandic pages |
+| `ects` | Credits. **Not available anywhere in Skemman's metadata.** |
+| `degree` | E.g. `Magister Scientiarum` |
+| `subject` | The field named after "degree in" |
+| `committee`, `examiner`, `advisors` | Semicolon-separated names |
+| `year_on_page` | Year printed on the page |
+| `n_pages` | Total pages in the PDF |
+| `text_chars` | How much text was extracted |
+
+`n_pages` is the only field that is essentially always present: it comes from the PDF
+structure rather than from parsing text.
+
+### `thesis_titlepage_failure`
+
+Why a thesis produced nothing.
+
+| Column | Meaning |
+| --- | --- |
+| `item_url` | Handle URL, to look it up |
+| `pdf_url` | The bitstream that failed |
+| `reason` | What went wrong |
+| `permanent` | Whether it is worth retrying |
+
+`permanent` files are skipped on later runs unless `--retry-failed` is passed.

@@ -1,0 +1,75 @@
+---
+title: "Quickstart"
+---
+
+Harvest one collection end to end. This example takes the School of Engineering and
+Natural Sciences at the University of Iceland, handle `1946/2064`.
+
+## 1. Create the database
+
+```bash
+duckdb thesis.db < scripts/create_thesis_db.sql
+```
+
+## 2. What exists
+
+One year at a time:
+
+```bash
+for year in $(seq 2010 2026); do
+  skemman simple-search --location 1946/2064 --year "$year" --output thesis.db
+done
+```
+
+PowerShell:
+
+```powershell
+foreach ($year in 2010..2026) {
+  skemman simple-search --location 1946/2064 --year $year --output thesis.db
+}
+```
+
+This fills `thesis`: one row per search result, with the id, date, title and authors.
+
+## 3. The item pages
+
+```bash
+skemman metadata-load --db thesis.db
+```
+
+Fetches each item page once and parses it into `thesis_metadata`, `people`,
+`thesis_people`, `keywords` and `thesis_keywords`. The HTML is cached, so this is the only
+time each page is fetched.
+
+## 4. What is attached
+
+```bash
+skemman files-index --db thesis.db
+```
+
+No network at all — it reads the file table off the HTML step 3 already saved, into
+`thesis_file`: filename, size, access status and type.
+
+Run this **before** step 5. It is what lets the harvester skip closed files and take small
+ones first.
+
+## 5. The title pages
+
+```bash
+skemman titlepage-load --db thesis.db --degree-level master
+```
+
+Fetches each open PDF, keeps its first pages as text, and reads the faculty, credits and
+degree into `thesis_titlepage`.
+
+Expect roughly 25 theses a minute at the default two-second delay.
+
+## Then query it
+
+```sql
+select faculty, count(*) as n, median(n_pages) as pages, median(ects) as ects
+from thesis_titlepage
+where faculty is not null
+group by 1
+order by 2 desc;
+```

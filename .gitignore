@@ -53,9 +53,8 @@ Thumbs.db
 .idea/
 
 # Quarto
-/docs/
+docs/_site/
 /.quarto/
-/_freeze/
 *_files/
 *.quarto_ipynb
 

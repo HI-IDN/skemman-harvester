@@ -1,0 +1,76 @@
+---
+title: "Commands"
+---
+
+Five commands. Each is resumable, and each caches what it fetches, so re-running does only
+what is missing.
+
+## `simple-search`
+
+Reads a collection's search listing into `thesis`.
+
+```bash
+skemman simple-search --location 1946/2064 --year 2018
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--location`, `-l` | Collection handle, e.g. `1946/2064`. |
+| `--year`, `-y` | Exact year, filtered on `dateIssued`. |
+| `--url` | A full search URL, instead of handle and year. |
+| `--rpp` | Results per page. Default 25. |
+| `--output`, `-o` | Database path. |
+
+Re-running a year picks up newly deposited theses; existing ids are left alone.
+
+## `metadata-load`
+
+Fetches each item page and parses it.
+
+```bash
+skemman metadata-load --ids 4445,25337
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--ids` | Comma-separated thesis ids. Default: everything missing metadata. |
+| `--out-html` | HTML cache directory. Default `data/raw/items`. |
+| `--delay` | Seconds between requests. |
+
+## `files-index`
+
+Reads the file table off the cached HTML into `thesis_file`. **No network.**
+
+```bash
+skemman files-index
+```
+
+This is what makes the next step cheap: knowing a file's size and access status beforehand
+means closed files are never requested and small ones go first.
+
+## `titlepage-load`
+
+Fetches open PDFs and reads their title pages into `thesis_titlepage`.
+
+```bash
+skemman titlepage-load --degree-level master --max-mb 50
+```
+
+| Option | Meaning |
+| --- | --- |
+| `--degree-level` | `master` (default), `bachelor`, `phd`. |
+| `--limit` | Stop after N theses. |
+| `--ids` | Specific ids, ignoring the failure filter. |
+| `--max-mb` | Skip PDFs larger than this. |
+| `--include-closed` | Try files the item page marks closed. |
+| `--retry-failed` | Retry ones recorded as permanently unavailable. |
+| `--keep-pdf` | Keep the downloaded PDFs. |
+| `--log` | Failure log path. Default `logs/titlepage.log`. |
+
+## `clean-people`
+
+Normalizes names already loaded: strips embedded birth years and parenthesized roles.
+
+```bash
+skemman clean-people
+```

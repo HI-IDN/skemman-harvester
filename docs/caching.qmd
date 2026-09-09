@@ -1,0 +1,58 @@
+---
+title: "Caching"
+---
+
+Every fetch is cached, and the cache is the reason a re-run is cheap.
+
+## What is kept
+
+| Path | What | Size |
+| --- | --- | --- |
+| `data/raw/items/<id>.html` | Skemman item page | ~30 KB each |
+| `data/raw/pdf_text/<id>.txt` | First pages of the PDF, as plain text | ~5 KB each |
+| `data/raw/pdfs/<id>.pdf` | Only with `--keep-pdf` | megabytes |
+
+`<id>` is the Skemman handle suffix throughout, so `data/raw/pdf_text/10688.txt`,
+`data/raw/items/10688.html` and <https://skemman.is/handle/1946/10688> are the same thesis.
+
+## Why text and not the PDF
+
+A master's thesis averages about 7 MB and the largest seen is over 500 MB. Keeping the
+PDFs for one university's master's theses costs around 12 GB; keeping the first eight
+pages as text costs about 20 MB.
+
+The text is all the parser reads, so nothing is lost — and the PDF can always be fetched
+again from Skemman if you need it.
+
+## The page-count marker
+
+The first line of each text file is a marker holding the PDF's page count:
+
+```
+%%PAGES	106
+Mid-Holocene eruptive activity in the Hekla volcanic system
+...
+```
+
+Without it, deleting the PDF would throw away how long the thesis was. With it, the number
+survives in five bytes.
+
+## Improving the parser costs nothing
+
+Because the text is cached, a better parser can be run over everything already harvested
+without a single request:
+
+```bash
+duckdb thesis.db -c "drop table thesis_titlepage"
+skemman titlepage-load
+```
+
+That re-parses at roughly 75 theses a second, against 0.4 a second when fetching.
+
+## What is not cached
+
+A PDF that cannot be read is **not** cached, so a truncated download is retried next time
+rather than being silently skipped forever.
+
+A PDF that reads but yields no text — a scan — *is* cached, with its page count. That is a
+real answer, not a failure.

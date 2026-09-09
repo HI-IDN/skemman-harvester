@@ -1,0 +1,71 @@
+---
+title: "Install"
+---
+
+Python 3.10 or newer.
+
+```bash
+pip install git+https://github.com/HI-IDN/skemman-harvester.git
+```
+
+That gives you the `skemman` command:
+
+```bash
+skemman --help
+```
+
+## From source
+
+```bash
+git clone git@github.com:HI-IDN/skemman-harvester.git
+cd skemman-harvester
+pip install -e ".[dev]"
+pytest
+```
+
+## As a submodule
+
+If your analysis lives in its own repository and you want to develop both together, vendor
+this one in:
+
+```bash
+git submodule add git@github.com:HI-IDN/skemman-harvester.git
+pip install -e ./skemman-harvester
+```
+
+That is how [skemman-msc](https://github.com/HI-IDN/skemman-msc) uses it.
+
+## Configure
+
+Copy `config/collections.yaml` and edit it:
+
+```yaml
+base_url: "https://skemman.is"
+user_agent: "skemman-scraper/0.1 research crawler; contact: you@example.is"
+request_delay_seconds: 2.0
+timeout_seconds: 30
+handles:
+  HI: "1946/2064"
+  HR: "1946/6870"
+```
+
+::: {.callout-important}
+## Put a real address in `user_agent`
+
+It is what makes your crawler identifiable to the people running the server. A contactable
+crawler gets a conversation when something goes wrong; an anonymous one gets blocked.
+:::
+
+`request_delay_seconds` is the pause between requests. Two seconds is the default and is
+deliberately conservative.
+
+## Find a collection handle
+
+Browse to a collection on Skemman. The URL ends in the handle:
+
+```
+https://skemman.is/handle/1946/2064
+                            ^^^^^^^^
+```
+
+That is what `--location` takes.

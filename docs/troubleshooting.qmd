@@ -1,0 +1,59 @@
+---
+title: "Troubleshooting"
+---
+
+## "The process cannot access the file"
+
+DuckDB allows one process to open a database at a time. A running `skemman` command locks
+everyone else out, including your IDE's database panel and any R or Python session.
+
+Close the other connection. Note that closing an editor tab does not disconnect an IDE
+data source — disconnect it explicitly, or quit the IDE.
+
+After any write, run `CHECKPOINT;` so the `.wal` file folds back into the database.
+
+## The progress bar moves but nothing is written
+
+Look at `failed` in the progress bar and then at `logs/titlepage.log`. Each line names the
+thesis, its handle URL, whether the failure is permanent, and why.
+
+Common reasons:
+
+| Reason | Meaning |
+| --- | --- |
+| `not a PDF (restricted or a landing page)` | The server answered with something other than a PDF. Permanent. |
+| `download failed: HTTPError 404` | The bitstream is gone. Permanent. |
+| `unreadable PDF: PdfStreamError` | The file arrived truncated. Retried next run. |
+
+## "Stream has ended unexpectedly"
+
+The PDF arrived incomplete. Skemman serves very large files unreliably, and does not
+always send `Content-Length`, so a short read cannot always be detected during download.
+
+Large files are fetched last, so this affects the tail of a run. `--max-mb` skips them
+altogether:
+
+```bash
+skemman titlepage-load --max-mb 50
+```
+
+## Encrypted PDFs
+
+Some are AES-encrypted without a password. `pypdf` needs `cryptography` for those; it is a
+declared dependency, so a normal install handles it.
+
+## Nothing happens
+
+If every thesis already has a row, there is nothing to do. To re-parse from cache without
+fetching:
+
+```bash
+duckdb thesis.db -c "drop table thesis_titlepage"
+skemman titlepage-load
+```
+
+## Font and xref warnings
+
+`pypdf` logs a great deal about unusual fonts and cross-reference tables. These are
+suppressed below the error level, because the text extracts regardless. If you want them,
+raise the level for the `pypdf` logger.

@@ -1,0 +1,42 @@
+---
+title: "Crawling etiquette"
+---
+
+Skemman is run by the National and University Library of Iceland for the Icelandic
+universities. It is a public service, not a CDN, and it should be treated accordingly.
+
+## What this tool does
+
+**One request at a time.** No concurrency, no connection pools. Requests are serialized.
+
+**A delay between requests.** `request_delay_seconds`, two seconds by default. The delay is
+applied only to actual network fetches: a thesis served from cache costs nothing and waits
+for nothing.
+
+**An identifiable user agent.** Set `user_agent` in `config/collections.yaml` with a real
+contact address. A contactable crawler gets an email when something is wrong; an anonymous
+one gets blocked.
+
+**Closed files are never requested.** `files-index` reads the access status off the item
+page, and anything not marked `Opinn` is skipped without a request. In a typical
+university collection that is several hundred requests never made.
+
+**Failures are not retried blindly.** A file that answers 403, 404 or a login page is
+recorded as permanently unavailable and skipped from then on. Only transient failures are
+tried again.
+
+## What it will not do
+
+No logins, no session tokens, no cookies. No bypassing embargoes: a thesis under embargo
+stays under embargo. No CAPTCHA solving, no user-agent rotation, no anti-bot evasion.
+
+## Tuning the delay
+
+One second is defensible for a full harvest of a few thousand records:
+
+```yaml
+request_delay_seconds: 1.0
+```
+
+Below that, ask yourself whether you need the data faster than the library needs its
+server. You are fetching each file once, and the cache means you never fetch it twice.

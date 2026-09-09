@@ -1,0 +1,48 @@
+---
+title: "skemman-harvester"
+---
+
+Harvest Icelandic thesis records from [Skemman](https://skemman.is) into a DuckDB
+database — **any collection, any year, any degree level**.
+
+Skemman is the shared repository of the Icelandic universities. This tool reads what it
+already publishes and turns it into something you can query:
+
+```bash
+skemman simple-search --location 1946/2064 --year 2018
+skemman metadata-load
+skemman files-index
+skemman titlepage-load --degree-level master
+```
+
+You end up with a DuckDB file holding one row per thesis, normalized authors, advisors and
+keywords, and — for open PDFs — the faculty, credits and degree printed on the title page.
+
+## Why the title page matters
+
+Repository keywords are a suggestion. Whoever deposited the thesis typed them, and they
+vary by year, by department and by person.
+
+The title page is different. It states the faculty, the degree and the credits outright,
+because the university put them there. It also carries fields the metadata does not expose
+at all: **ECTS**, and how long the thesis actually is.
+
+When the two disagree, the document wins.
+
+## What it deliberately does not do
+
+- **No logins, no credentials.** Only what Skemman serves publicly.
+- **No bypassing access rules.** A file the item page marks `Lokaður` is recorded as closed
+  and never requested. Embargo dates are respected by simply obeying them.
+- **No hammering.** One request at a time, with a configurable delay — two seconds by
+  default.
+- **No hoarding.** PDFs are deleted once their first pages are read to text. A full
+  master's harvest costs about 20 MB rather than 12 GB.
+
+If you need something outside those lines, this is the wrong tool.
+
+## Where to start
+
+- [Install](install.qmd) — get it running.
+- [Quickstart](quickstart.qmd) — a full harvest of one collection, start to finish.
+- [Commands](commands.qmd) — what each step does.

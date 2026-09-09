@@ -1,0 +1,64 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "skemman-harvester"
+  description: "Harvest Icelandic thesis records from Skemman into DuckDB."
+  site-url: https://hi-idn.github.io/skemman-harvester/
+  repo-url: https://github.com/HI-IDN/skemman-harvester
+  repo-actions: [edit, issue]
+  favicon: img/hi/favicon.svg
+  search:
+    location: navbar
+    type: overlay
+  navbar:
+    logo: img/hi/hi_named_logo-en.svg
+    logo-alt: "University of Iceland"
+    background: primary
+    left:
+      - text: Home
+        href: index.qmd
+      - text: Get started
+        href: install.qmd
+      - text: Guide
+        href: commands.qmd
+      - text: Reference
+        href: schema.qmd
+    right:
+      - icon: github
+        href: https://github.com/HI-IDN/skemman-harvester
+        aria-label: Source on GitHub
+  sidebar:
+    style: floating
+    collapse-level: 1
+    contents:
+      - index.qmd
+      - section: "Getting started"
+        contents:
+          - install.qmd
+          - quickstart.qmd
+      - section: "Guide"
+        contents:
+          - commands.qmd
+          - caching.qmd
+          - etiquette.qmd
+      - section: "Reference"
+        contents:
+          - schema.qmd
+          - troubleshooting.qmd
+  page-footer:
+    left: "© 2026 Háskóli Íslands · MIT licence"
+    right:
+      - icon: github
+        href: https://github.com/HI-IDN/skemman-harvester
+
+format:
+  html:
+    theme:
+      - cosmo
+      - hi.scss
+    include-in-header: partials/header-includes.inc
+    toc: true
+    code-copy: true
+    code-overflow: wrap
