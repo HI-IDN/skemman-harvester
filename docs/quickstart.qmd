@@ -13,7 +13,11 @@ duckdb thesis.db < scripts/create_thesis_db.sql
 
 ## 2. What exists
 
-One year at a time:
+One year at a time.
+
+::: {.panel-tabset}
+
+## Bash
 
 ```bash
 for year in $(seq 2010 2026); do
@@ -21,13 +25,15 @@ for year in $(seq 2010 2026); do
 done
 ```
 
-PowerShell:
+## PowerShell
 
 ```powershell
 foreach ($year in 2010..2026) {
   skemman simple-search --location 1946/2064 --year $year --output thesis.db
 }
 ```
+
+:::
 
 This fills `thesis`: one row per search result, with the id, date, title and authors.
 
