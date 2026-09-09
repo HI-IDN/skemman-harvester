@@ -5,23 +5,24 @@ title: "Commands"
 Five commands. Each is resumable, and each caches what it fetches, so re-running does only
 what is missing.
 
-## `simple-search`
+## `oai-pmh`
 
-Reads a collection's search listing into `thesis`.
+Reads a collection's OAI-PMH records into `thesis`.
 
 ```bash
-skemman simple-search --location 1946/2064 --year 2018
+skemman oai-pmh --location 1946/2064 --year-start 2010 --year-end 2026
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `--location`, `-l` | Collection handle, e.g. `1946/2064`. |
-| `--year`, `-y` | Exact year, filtered on `dateIssued`. |
-| `--url` | A full search URL, instead of handle and year. |
-| `--rpp` | Results per page. Default 25. |
+| `--location`, `-l` | Collection handle, e.g. `1946/2064`; mapped to `com_1946_2064`. |
+| `--set` | Exact OAI-PMH setSpec to harvest. |
+| `--year-start` | First `dc:date` year to keep. |
+| `--year-end` | Last `dc:date` year to keep. |
+| `--metadata-prefix` | OAI-PMH metadata prefix. Default `oai_dc`. |
 | `--output`, `-o` | Database path. |
 
-Re-running a year picks up newly deposited theses; existing ids are left alone.
+Re-running a set picks up newly deposited theses; existing ids are left alone.
 
 ## `metadata-load`
 

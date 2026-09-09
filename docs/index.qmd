@@ -9,7 +9,7 @@ Skemman is the shared repository of the Icelandic universities. This tool reads 
 already publishes and turns it into something you can query:
 
 ```bash
-skemman simple-search --location 1946/2064 --year 2018
+skemman oai-pmh --location 1946/2064 --year-start 2010 --year-end 2026
 skemman metadata-load
 skemman files-index
 skemman titlepage-load --degree-level master

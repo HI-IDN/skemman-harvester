@@ -11,7 +11,7 @@ publishes: the search listings, the item pages, and the title page of each open 
 it at a collection handle and it builds a queryable database of what is there.
 
 ```bash
-skemman simple-search --location 1946/2064 --year 2018
+skemman oai-pmh --location 1946/2064 --year-start 2010 --year-end 2026
 skemman metadata-load
 skemman files-index
 skemman titlepage-load --degree-level master
@@ -29,10 +29,9 @@ skemman titlepage-load --degree-level master
   ask to keep them. A full master's harvest costs about 20 MB on disk rather than 12 GB.
 
 > [!WARNING]
-> `simple-search` builds URLs under `/simple-search`, which
-> [robots.txt](https://skemman.is/robots.txt) disallows. Skemman exposes OAI-PMH at
-> `/oai/request`, the standard interface for listing records out of a repository, which is
-> not disallowed. Moving to it is open work — see
+> `oai-pmh` lists records through `/oai/request`, the standard repository-harvesting
+> interface. The legacy `simple-search` command remains for comparison, but it builds URLs
+> under `/simple-search`, which [robots.txt](https://skemman.is/robots.txt) disallows. See
 > [Crawling etiquette](https://hi-idn.github.io/skemman-harvester/etiquette.html).
 
 ## Install
@@ -54,15 +53,16 @@ pytest
 
 Each is resumable and each caches what it fetches.
 
-### 1. `simple-search` — what exists
+### 1. `oai-pmh` — what exists
 
-Reads a collection's search listing, one year at a time, into the `thesis` table.
+Reads a collection's OAI-PMH set into the `thesis` table.
 
 ```bash
-skemman simple-search --location 1946/2064 --year 2018
+skemman oai-pmh --location 1946/2064 --year-start 2010 --year-end 2026
 ```
 
-Collection handles and the default year range live in `config/collections.yaml`.
+Collection handles map to Skemman's OAI-PMH community sets, so `1946/2064` becomes
+`com_1946_2064`. Use `--set` directly to harvest a specific OAI-PMH set.
 
 ### 2. `metadata-load` — the item pages
 

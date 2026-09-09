@@ -21,19 +21,15 @@ Crawl-delay: 30
 ignore what the server asked for. If you have a reason — a conversation with the library,
 a tiny harvest — that is yours to make, but make it deliberately.
 
-**`/simple-search` is disallowed.** That is exactly the path `simple-search` uses.
+**`/simple-search` is disallowed.** Use `oai-pmh` for listing records.
 
 ::: {.callout-warning}
 ## `simple-search` goes against robots.txt
 
-The `simple-search` command builds URLs under `/simple-search`, which robots.txt asks
-crawlers not to touch. It is included because it works and because it is how this tool
-grew, but it is not the right long-term interface.
-
 Skemman is a DSpace repository and exposes **OAI-PMH** at
 [`/oai/request`](https://skemman.is/oai/request?verb=Identify) — the standard interface for
-listing records out of a repository, designed for exactly this, and not disallowed.
-Replacing `simple-search` with it is open work.
+listing records out of a repository, designed for exactly this, and not disallowed. The
+`oai-pmh` command uses this endpoint.
 
 `/handle/` and `/bitstream/`, which `metadata-load` and `titlepage-load` use, are not
 disallowed.

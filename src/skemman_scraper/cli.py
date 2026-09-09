@@ -10,6 +10,7 @@ from rich.console import Console
 from .config import load_config
 from .files_index import load_file_index
 from .metadata_load import clean_people_table, load_metadata
+from .oai_pmh import harvest_oai_pmh, set_spec_from_location
 from .simple_search import harvest_simple_search
 from .titlepage_load import load_titlepages
 
@@ -36,7 +37,12 @@ def write_thesis_rows(df: pd.DataFrame, db_path: Path) -> None:
             insert into thesis (id, date_accepted, title, authors)
             select
                 cast(df.id as integer),
-                try_strptime(df.date_accepted, '%d.%m.%Y')::date,
+                coalesce(
+                    try_strptime(df.date_accepted, '%d.%m.%Y')::date,
+                    try_strptime(df.date_accepted, '%Y-%m-%d')::date,
+                    try_strptime(df.date_accepted, '%Y-%m')::date,
+                    try_strptime(df.date_accepted, '%Y')::date
+                ),
                 cast(df.title as varchar),
                 cast(df.authors as varchar)
             from df
@@ -74,6 +80,39 @@ def simple_search_cmd(
     write_thesis_rows(df, output)
     if "source_url" in df.columns:
         console.print(f"[blue]Source URL: {df['source_url'].iloc[0]}[/blue]")
+    console.print(f"[green]Wrote {len(df)} records to {output}[/green]")
+
+
+@app.command(name="oai-pmh")
+def oai_pmh_cmd(
+        location: str | None = typer.Option(None, "--location", "-l"),
+        set_spec: str | None = typer.Option(None, "--set"),
+        year_start: int | None = typer.Option(None, "--year-start"),
+        year_end: int | None = typer.Option(None, "--year-end"),
+        metadata_prefix: str = typer.Option("oai_dc", "--metadata-prefix"),
+        paginate: bool = typer.Option(True, "--paginate/--no-paginate"),
+        output: Path = typer.Option(Path("data/processed/thesis.db"), "--output", "-o"),
+        config: Path = typer.Option(Path("config/collections.yaml"), "--config", "-c"),
+) -> None:
+    """Harvest Skemman listing records through OAI-PMH into DuckDB."""
+    cfg = load_config(config)
+    if not location and not set_spec:
+        raise typer.BadParameter("Provide either --location or --set.")
+    target_set = set_spec or set_spec_from_location(location or "")
+    df = harvest_oai_pmh(
+        cfg,
+        location=location,
+        set_spec=set_spec,
+        year_start=year_start,
+        year_end=year_end,
+        metadata_prefix=metadata_prefix,
+        paginate=paginate,
+    )
+    if df.empty:
+        console.print("[yellow]No data found for the provided filters.[/yellow]")
+        return
+    write_thesis_rows(df, output)
+    console.print(f"[blue]OAI-PMH set: {target_set}[/blue]")
     console.print(f"[green]Wrote {len(df)} records to {output}[/green]")
 
 

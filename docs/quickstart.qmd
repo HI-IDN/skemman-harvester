@@ -13,24 +13,20 @@ duckdb thesis.db < scripts/create_thesis_db.sql
 
 ## 2. What exists
 
-One year at a time.
+Through Skemman's OAI-PMH endpoint.
 
 ::: {.panel-tabset}
 
 ## Bash
 
 ```bash
-for year in $(seq 2010 2026); do
-  skemman simple-search --location 1946/2064 --year "$year" --output thesis.db
-done
+skemman oai-pmh --location 1946/2064 --year-start 2010 --year-end 2026 --output thesis.db
 ```
 
 ## PowerShell
 
 ```powershell
-foreach ($year in 2010..2026) {
-  skemman simple-search --location 1946/2064 --year $year --output thesis.db
-}
+skemman oai-pmh --location 1946/2064 --year-start 2010 --year-end 2026 --output thesis.db
 ```
 
 :::
