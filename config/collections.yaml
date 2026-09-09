@@ -1,7 +1,10 @@
 # Skemman simple-search settings.
 base_url: "https://skemman.is"
 user_agent: "skemman-scraper/0.1 research crawler; contact: replace-with-email@example.com"
-request_delay_seconds: 2.0
+# skemman.is/robots.txt asks for Crawl-delay: 30. Lowering this is a
+# decision to ignore what the server asked for, so leave it unless you have
+# spoken to the people running it.
+request_delay_seconds: 30.0
 timeout_seconds: 30
 
 year_start: 2010

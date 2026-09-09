@@ -68,7 +68,9 @@ skemman titlepage-load --db thesis.db --degree-level master
 Fetches each open PDF, keeps its first pages as text, and reads the faculty, credits and
 degree into `thesis_titlepage`.
 
-Expect roughly 25 theses a minute at the default two-second delay.
+At the default 30-second delay — what robots.txt asks for — expect about two theses a
+minute. A thousand theses is an overnight job. See
+[Crawling etiquette](etiquette.qmd) before lowering it.
 
 ## Then query it
 

@@ -5,6 +5,23 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] — 2026-09-09
+
+### Changed
+
+- **Default request delay is now 30 seconds, up from 2.** That is what
+  [skemman.is/robots.txt](https://skemman.is/robots.txt) asks for with `Crawl-delay: 30`.
+  The previous default ignored it.
+
+### Documented
+
+- `simple-search` builds URLs under `/simple-search`, which robots.txt disallows. This is
+  now stated in the README, in the documentation and in a comment at the code that does
+  it. Skemman exposes OAI-PMH at `/oai/request`, which is not disallowed and is the
+  standard interface for this; replacing `simple-search` with it is tracked as an issue.
+- The etiquette page claimed the tool was well-behaved without having checked robots.txt.
+  It now quotes it and says plainly where the tool departs from it.
+
 ## [1.0.0] — 2026-09-09
 
 First release as a standalone package. Extracted from
@@ -46,4 +63,5 @@ world's word for reading records out of one.
 - Renamed from `skemman-scraper` to `skemman-harvester`. The CLI command stays `skemman`.
 - Progress uses `tqdm` throughout, matching what `simple-search` already did.
 
+[1.1.0]: https://github.com/HI-IDN/skemman-harvester/releases/tag/v1.1.0
 [1.0.0]: https://github.com/HI-IDN/skemman-harvester/releases/tag/v1.0.0

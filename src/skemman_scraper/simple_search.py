@@ -26,6 +26,11 @@ def _normalize_location(location: str) -> str:
     return value
 
 
+# NOTE: skemman.is/robots.txt has `Disallow: /simple-search`.
+# This function builds a URL under that path, so calling it goes against what
+# the server asked crawlers to do. Skemman is a DSpace repository and exposes
+# OAI-PMH at /oai/request, which is the sanctioned way to list records and is
+# not disallowed. Replacing this with OAI-PMH is tracked in the issue tracker.
 def build_simple_search_url(
         base_url: str,
         location: str,

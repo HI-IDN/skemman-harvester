@@ -5,21 +5,54 @@ title: "Crawling etiquette"
 Skemman is run by the National and University Library of Iceland for the Icelandic
 universities. It is a public service, not a CDN, and it should be treated accordingly.
 
+## What robots.txt asks for
+
+[skemman.is/robots.txt](https://skemman.is/robots.txt) states two things that matter here:
+
+```
+User-agent: *
+Disallow: /simple-search
+...
+Crawl-delay: 30
+```
+
+**A 30-second delay between requests.** `request_delay_seconds` in
+`config/collections.yaml` defaults to 30 for that reason. Lowering it is a decision to
+ignore what the server asked for. If you have a reason — a conversation with the library,
+a tiny harvest — that is yours to make, but make it deliberately.
+
+**`/simple-search` is disallowed.** That is exactly the path `simple-search` uses.
+
+::: {.callout-warning}
+## `simple-search` goes against robots.txt
+
+The `simple-search` command builds URLs under `/simple-search`, which robots.txt asks
+crawlers not to touch. It is included because it works and because it is how this tool
+grew, but it is not the right long-term interface.
+
+Skemman is a DSpace repository and exposes **OAI-PMH** at
+[`/oai/request`](https://skemman.is/oai/request?verb=Identify) — the standard interface for
+listing records out of a repository, designed for exactly this, and not disallowed.
+Replacing `simple-search` with it is open work.
+
+`/handle/` and `/bitstream/`, which `metadata-load` and `titlepage-load` use, are not
+disallowed.
+:::
+
 ## What this tool does
 
 **One request at a time.** No concurrency, no connection pools. Requests are serialized.
 
-**A delay between requests.** `request_delay_seconds`, two seconds by default. The delay is
-applied only to actual network fetches: a thesis served from cache costs nothing and waits
-for nothing.
+**The delay applies only to network fetches.** A thesis served from cache costs nothing and
+waits for nothing, so a re-run over cached material is instant regardless of the delay.
 
 **An identifiable user agent.** Set `user_agent` in `config/collections.yaml` with a real
 contact address. A contactable crawler gets an email when something is wrong; an anonymous
 one gets blocked.
 
 **Closed files are never requested.** `files-index` reads the access status off the item
-page, and anything not marked `Opinn` is skipped without a request. In a typical
-university collection that is several hundred requests never made.
+page, and anything not marked `Opinn` is skipped without a request. In a typical university
+collection that is several hundred requests never made.
 
 **Failures are not retried blindly.** A file that answers 403, 404 or a login page is
 recorded as permanently unavailable and skipped from then on. Only transient failures are
@@ -30,13 +63,11 @@ tried again.
 No logins, no session tokens, no cookies. No bypassing embargoes: a thesis under embargo
 stays under embargo. No CAPTCHA solving, no user-agent rotation, no anti-bot evasion.
 
-## Tuning the delay
+## If you lower the delay
 
-One second is defensible for a full harvest of a few thousand records:
+At 30 seconds a thousand theses take about eight hours. That is the number robots.txt
+implies, and for a one-off harvest it is worth simply letting it run overnight.
 
-```yaml
-request_delay_seconds: 1.0
-```
-
-Below that, ask yourself whether you need the data faster than the library needs its
-server. You are fetching each file once, and the cache means you never fetch it twice.
+If you do lower it, lower it once, for a known-size job, having thought about who is on the
+other end. And put a real address in `user_agent` first, so they can reach you rather than
+just block you.

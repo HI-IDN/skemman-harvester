@@ -22,10 +22,18 @@ skemman titlepage-load --degree-level master
 - **No logins, no credentials.** Only what Skemman serves publicly.
 - **No bypassing access rules.** A thesis the item page marks `Lokaður` is recorded as
   closed and never requested. Embargo dates are respected because they are simply obeyed.
-- **No hammering.** One request at a time, with a configurable delay — two seconds by
-  default. Everything is cached, so a re-run fetches only what is missing.
+- **No hammering.** One request at a time, with a delay of 30 seconds by default —
+  what [skemman.is/robots.txt](https://skemman.is/robots.txt) asks for. Everything is
+  cached, so a re-run fetches only what is missing.
 - **No hoarding.** PDFs are deleted after their first pages are read to text, unless you
   ask to keep them. A full master's harvest costs about 20 MB on disk rather than 12 GB.
+
+> [!WARNING]
+> `simple-search` builds URLs under `/simple-search`, which
+> [robots.txt](https://skemman.is/robots.txt) disallows. Skemman exposes OAI-PMH at
+> `/oai/request`, the standard interface for listing records out of a repository, which is
+> not disallowed. Moving to it is open work — see
+> [Crawling etiquette](https://hi-idn.github.io/skemman-harvester/etiquette.html).
 
 ## Install
 
