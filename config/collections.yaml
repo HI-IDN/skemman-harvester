@@ -1,6 +1,6 @@
-# Skemman simple-search settings.
+# Skemman harvester settings.
 base_url: "https://skemman.is"
-user_agent: "skemman-scraper/0.1 research crawler; contact: replace-with-email@example.com"
+user_agent: "skemman-harvester/1.1 research crawler; contact: helgaingim@hi.is"
 # skemman.is/robots.txt asks for Crawl-delay: 30. Lowering this is a
 # decision to ignore what the server asked for, so leave it unless you have
 # spoken to the people running it.
@@ -9,6 +9,8 @@ timeout_seconds: 30
 
 year_start: 2010
 year_end: 2026
+record_limit:
+titlepage_pages: 8
 
 handles:
   HI: "1946/2064"

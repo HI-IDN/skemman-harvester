@@ -60,6 +60,28 @@ def build_oai_pmh_url(
     return f"{endpoint}?{urlencode(params)}"
 
 
+def _safe_cache_part(value: str | None) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", value or "all").strip("_") or "all"
+
+
+def oai_cache_path(
+        cache_dir: Path,
+        *,
+        metadata_prefix: str,
+        set_spec: str | None,
+        offset: int,
+) -> Path:
+    stem = f"{_safe_cache_part(metadata_prefix)}_{_safe_cache_part(set_spec)}_{offset:06d}"
+    return cache_dir / f"{stem}.xml"
+
+
+def _offset_from_resumption_token(token: str | None, fallback: int) -> int:
+    if not token:
+        return fallback
+    match = re.search(r"/(\d+)$", token)
+    return int(match.group(1)) if match else fallback
+
+
 def _text(element: ET.Element | None) -> str | None:
     if element is None or element.text is None:
         return None
@@ -146,18 +168,22 @@ def harvest_oai_pmh(
         metadata_prefix: str = "oai_dc",
         paginate: bool = True,
         cache_dir: Path | None = Path("data/raw/oai"),
+        limit: int | None = None,
 ) -> pd.DataFrame:
     base_url = config["base_url"].rstrip("/")
     target_set = set_spec or (set_spec_from_location(location) if location else None)
     session = PoliteSession(
-        user_agent=config["user_agent"],
+        user_agent=config.get("user_agent", "skemman-harvester"),
         delay_seconds=float(config.get("request_delay_seconds", 30.0)),
         timeout_seconds=int(config.get("timeout_seconds", 30)),
-        cache_dir=cache_dir,
+        cache_dir=None,
     )
+    if cache_dir:
+        cache_dir.mkdir(parents=True, exist_ok=True)
 
     rows: list[dict[str, Any]] = []
     next_token: str | None = None
+    offset = 0
     target_url = build_oai_pmh_url(
         base_url,
         metadata_prefix=metadata_prefix,
@@ -169,13 +195,31 @@ def harvest_oai_pmh(
 
     with tqdm(desc=" ".join(desc_parts), unit="page") as progress:
         while target_url:
-            xml = session.get_text(target_url, use_cache=True)
+            cache_path = (
+                oai_cache_path(
+                    cache_dir,
+                    metadata_prefix=metadata_prefix,
+                    set_spec=target_set,
+                    offset=offset,
+                )
+                if cache_dir
+                else None
+            )
+            if cache_path and cache_path.exists():
+                xml = cache_path.read_text(encoding="utf-8", errors="replace")
+            else:
+                xml = session.get_text(target_url, use_cache=False)
+                if cache_path:
+                    cache_path.write_text(xml, encoding="utf-8")
             page_rows, next_token = parse_oai_pmh_records(xml)
             rows.extend(page_rows)
             progress.update(1)
             progress.set_postfix(records=len(rows), page_records=len(page_rows))
+            if limit is not None and len(rows) >= limit:
+                break
             if not paginate or not next_token:
                 break
+            offset = _offset_from_resumption_token(next_token, offset + 1)
             target_url = build_oai_pmh_url(base_url, resumption_token=next_token)
 
     if year_start is not None or year_end is not None:
@@ -186,5 +230,8 @@ def harvest_oai_pmh(
             for row in rows
             if (year := _date_year(row.get("date_accepted"))) is not None and start <= year <= end
         ]
+
+    if limit is not None:
+        rows = rows[:limit]
 
     return pd.DataFrame(rows)

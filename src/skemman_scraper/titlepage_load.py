@@ -147,11 +147,12 @@ def parse_titlepage(text: str) -> dict[str, object]:
 # --- pdf handling ----------------------------------------------------------
 
 
-def extract_text(pdf: Path, pages: int = PAGES) -> tuple[str, int]:
+def extract_text(pdf: Path, pages: int | None = PAGES) -> tuple[str, int]:
     """Return the first pages as text, plus the document's total page count."""
     reader = pypdf.PdfReader(str(pdf))
     total = len(reader.pages)
-    text = "\n".join((reader.pages[i].extract_text() or "") for i in range(min(pages, total)))
+    page_count = total if pages is None else min(pages, total)
+    text = "\n".join((reader.pages[i].extract_text() or "") for i in range(page_count))
     return text, total
 
 
@@ -182,6 +183,7 @@ def _ensure_text(
     pdf_dir: Path,
     session: PoliteSession,
     keep_pdf: bool,
+    pages: int | None,
 ) -> tuple[str | None, int | None, bool]:
     """Return the cached title-page text, page count, and whether it came from cache."""
     text_path = text_dir / f"{thesis_id}.txt"
@@ -211,7 +213,7 @@ def _ensure_text(
             raise TitlepageError("not a PDF (restricted or a landing page)", permanent=True)
 
     try:
-        text, n_pages = extract_text(pdf_path)
+        text, n_pages = extract_text(pdf_path, pages=pages)
     except Exception as exc:  # noqa: BLE001 - a broken PDF should not stop the run
         # Not cached: a failed read is usually a truncated download, so it is
         # worth one more try on a later run.
@@ -324,14 +326,17 @@ def load_titlepages(
     retry_failed: bool = False,
     max_bytes: int | None = None,
     include_closed: bool = False,
+    pages: int | None = None,
 ) -> tuple[int, int, int]:
     """Load title-page fields for theses that do not have them yet.
 
     Returns (processed, with_faculty, failed).
     """
     cfg = load_config(config)
+    if pages is None:
+        pages = cfg.get("titlepage_pages", PAGES)
     session = PoliteSession(
-        user_agent=cfg.get("user_agent", "skemman-scraper"),
+        user_agent=cfg.get("user_agent", "skemman-harvester"),
         delay_seconds=float(cfg.get("request_delay_seconds", 2.0)),
         timeout_seconds=int(cfg.get("timeout_seconds", 30)),
     )
@@ -395,7 +400,7 @@ def load_titlepages(
         for thesis_id, url in bar:
             try:
                 text, n_pages, cached = _ensure_text(
-                    thesis_id, url, text_dir, pdf_dir, session, keep_pdf
+                    thesis_id, url, text_dir, pdf_dir, session, keep_pdf, pages
                 )
             except TitlepageError as exc:
                 failed += 1

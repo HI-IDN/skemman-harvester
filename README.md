@@ -11,7 +11,7 @@ publishes: the search listings, the item pages, and the title page of each open 
 it at a collection handle and it builds a queryable database of what is there.
 
 ```bash
-skemman oai-pmh --location 1946/2064 --year-start 2010 --year-end 2026
+skemman oai-pmh
 skemman metadata-load
 skemman files-index
 skemman titlepage-load --degree-level master
@@ -58,13 +58,15 @@ Each is resumable and each caches what it fetches.
 Reads a collection's OAI-PMH set into the `thesis` table.
 
 ```bash
-skemman oai-pmh --location 1946/2064 --year-start 2010 --year-end 2026
+skemman oai-pmh
 ```
 
 Collection handles map to Skemman's OAI-PMH community sets, so `1946/2064` becomes
-`com_1946_2064`. Use `--set` directly to harvest a specific OAI-PMH set.
-OAI-PMH XML pages are cached under `data/raw/oai/`, so re-running the same harvest does
-not wait through the network delay again.
+`com_1946_2064`. By default this command harvests the handles and years in
+`config/collections.yaml`. Use `--set` directly to harvest a specific OAI-PMH set.
+OAI-PMH XML pages are cached under `data/raw/oai/` with readable names such as
+`oai_dc_com_1946_2064_000000.xml`, so re-running the same harvest does not wait through
+the network delay again.
 
 ### 2. `metadata-load` — the item pages
 
@@ -116,9 +118,13 @@ skemman titlepage-load
 
 ```yaml
 base_url: "https://skemman.is"
-user_agent: "skemman-scraper/0.1 research crawler; contact: you@example.is"
+user_agent: "skemman-harvester/1.1 research crawler; contact: you@example.is"
 request_delay_seconds: 2.0
 timeout_seconds: 30
+year_start: 2010
+year_end: 2026
+record_limit:
+titlepage_pages: 8
 handles:
   HI: "1946/2064"
   HR: "1946/6870"
@@ -126,6 +132,10 @@ handles:
 
 Put a real contact address in `user_agent`. It is the courtesy that makes a crawler
 identifiable to the people running the server.
+
+Leave `record_limit` blank to harvest every OAI-PMH record, or set it to a number such as
+`10` for a quick check. `titlepage_pages` controls how many PDF pages are kept as text;
+leave it blank to keep the whole PDF text.
 
 ## Used by
 

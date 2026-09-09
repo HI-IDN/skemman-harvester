@@ -41,9 +41,13 @@ Copy `config/collections.yaml` and edit it:
 
 ```yaml
 base_url: "https://skemman.is"
-user_agent: "skemman-scraper/0.1 research crawler; contact: you@example.is"
-request_delay_seconds: 2.0
+user_agent: "skemman-harvester/1.1 research crawler; contact: you@example.is"
+request_delay_seconds: 30.0
 timeout_seconds: 30
+year_start: 2010
+year_end: 2026
+record_limit:
+titlepage_pages: 8
 handles:
   HI: "1946/2064"
   HR: "1946/6870"
@@ -56,8 +60,9 @@ It is what makes your crawler identifiable to the people running the server. A c
 crawler gets a conversation when something goes wrong; an anonymous one gets blocked.
 :::
 
-`request_delay_seconds` is the pause between requests. Two seconds is the default and is
-deliberately conservative.
+`request_delay_seconds` is the pause between requests. `record_limit` can be set to a
+number such as `10` for a quick check, or left blank to harvest everything. `titlepage_pages`
+controls how many PDF pages are kept as text; leave it blank to keep the whole PDF text.
 
 ## Find a collection handle
 

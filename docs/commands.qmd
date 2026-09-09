@@ -10,20 +10,22 @@ what is missing.
 Reads a collection's OAI-PMH records into `thesis`.
 
 ```bash
-skemman oai-pmh --location 1946/2064 --year-start 2010 --year-end 2026
+skemman oai-pmh
 ```
 
 | Option | Meaning |
 | --- | --- |
-| `--location`, `-l` | Collection handle, e.g. `1946/2064`; mapped to `com_1946_2064`. |
-| `--set` | Exact OAI-PMH setSpec to harvest. |
-| `--year-start` | First `dc:date` year to keep. |
-| `--year-end` | Last `dc:date` year to keep. |
+| `--location`, `-l` | Collection handle, e.g. `1946/2064`; mapped to `com_1946_2064`. Default: every handle in config. |
+| `--set` | Exact OAI-PMH setSpec to harvest. Default: every handle in config. |
+| `--year-start` | First `dc:date` year to keep. Default: `year_start` in config. |
+| `--year-end` | Last `dc:date` year to keep. Default: `year_end` in config. |
+| `--limit` | Stop after N records per set. Default: `record_limit` in config; blank means all. |
 | `--metadata-prefix` | OAI-PMH metadata prefix. Default `oai_dc`. |
 | `--cache-dir` | Cache directory for OAI-PMH XML pages. Default `data/raw/oai`. |
 | `--output`, `-o` | Database path. |
 
-Re-running a set picks up newly deposited theses; existing ids are left alone.
+Re-running the configured handles picks up newly deposited theses; existing ids are left
+alone.
 
 ## `metadata-load`
 
@@ -63,6 +65,7 @@ skemman titlepage-load --degree-level master --max-mb 50
 | `--degree-level` | `master` (default), `bachelor`, `phd`. |
 | `--limit` | Stop after N theses. |
 | `--ids` | Specific ids, ignoring the failure filter. |
+| `--pages` | PDF pages to keep as text. Default: `titlepage_pages` in config; blank means the whole PDF. |
 | `--max-mb` | Skip PDFs larger than this. |
 | `--include-closed` | Try files the item page marks closed. |
 | `--retry-failed` | Retry ones recorded as permanently unavailable. |

@@ -57,6 +57,7 @@ def oai_pmh_cmd(
         set_spec: str | None = typer.Option(None, "--set"),
         year_start: int | None = typer.Option(None, "--year-start"),
         year_end: int | None = typer.Option(None, "--year-end"),
+        limit: int | None = typer.Option(None, "--limit"),
         metadata_prefix: str = typer.Option("oai_dc", "--metadata-prefix"),
         paginate: bool = typer.Option(True, "--paginate/--no-paginate"),
         cache_dir: Path | None = typer.Option(Path("data/raw/oai"), "--cache-dir"),
@@ -65,25 +66,40 @@ def oai_pmh_cmd(
 ) -> None:
     """Harvest Skemman listing records through OAI-PMH into DuckDB."""
     cfg = load_config(config)
+    year_start = year_start if year_start is not None else cfg.get("year_start")
+    year_end = year_end if year_end is not None else cfg.get("year_end")
+    limit = limit if limit is not None else cfg.get("record_limit")
+
+    targets = [(location, set_spec)]
     if not location and not set_spec:
-        raise typer.BadParameter("Provide either --location or --set.")
-    target_set = set_spec or set_spec_from_location(location or "")
-    df = harvest_oai_pmh(
-        cfg,
-        location=location,
-        set_spec=set_spec,
-        year_start=year_start,
-        year_end=year_end,
-        metadata_prefix=metadata_prefix,
-        paginate=paginate,
-        cache_dir=cache_dir,
-    )
-    if df.empty:
+        handles = cfg.get("handles") or {}
+        targets = [(handle, None) for handle in handles.values()]
+    if not targets:
+        raise typer.BadParameter("Provide --location or --set, or configure handles.")
+
+    total = 0
+    for target_location, target_set_arg in targets:
+        target_set = target_set_arg or set_spec_from_location(target_location or "")
+        df = harvest_oai_pmh(
+            cfg,
+            location=target_location,
+            set_spec=target_set_arg,
+            year_start=year_start,
+            year_end=year_end,
+            metadata_prefix=metadata_prefix,
+            paginate=paginate,
+            cache_dir=cache_dir,
+            limit=limit,
+        )
+        if df.empty:
+            console.print(f"[yellow]No data found for OAI-PMH set {target_set}.[/yellow]")
+            continue
+        write_thesis_rows(df, output)
+        total += len(df)
+        console.print(f"[blue]OAI-PMH set: {target_set}[/blue]")
+        console.print(f"[green]Wrote {len(df)} records to {output}[/green]")
+    if not total:
         console.print("[yellow]No data found for the provided filters.[/yellow]")
-        return
-    write_thesis_rows(df, output)
-    console.print(f"[blue]OAI-PMH set: {target_set}[/blue]")
-    console.print(f"[green]Wrote {len(df)} records to {output}[/green]")
 
 
 @app.command(name="metadata-load")
@@ -128,6 +144,7 @@ def titlepage_load_cmd(
         limit: int | None = typer.Option(None, "--limit", help="Stop after N theses."),
         ids: str | None = typer.Option(None, "--ids", help="Comma-separated thesis ids."),
         degree_level: str = typer.Option("master", "--degree-level"),
+        pages: int | None = typer.Option(None, "--pages", help="PDF pages to keep as text."),
         text_dir: Path = typer.Option(Path("data/raw/pdf_text"), "--text-dir"),
         pdf_dir: Path = typer.Option(Path("data/raw/pdfs"), "--pdf-dir"),
         config: Path = typer.Option(Path("config/collections.yaml"), "--config", "-c"),
@@ -162,6 +179,7 @@ def titlepage_load_cmd(
         retry_failed=retry_failed,
         max_bytes=int(max_mb * 1024 * 1024) if max_mb else None,
         include_closed=include_closed,
+        pages=pages,
     )
     if processed:
         pct = 100.0 * with_faculty / processed

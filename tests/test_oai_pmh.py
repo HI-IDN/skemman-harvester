@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from skemman_scraper.oai_pmh import (
     build_oai_pmh_url,
+    oai_cache_path,
     parse_oai_pmh_records,
     set_spec_from_location,
 )
@@ -54,6 +57,24 @@ def test_resumption_token_url_uses_only_token():
         "https://skemman.is",
         resumption_token="oai_dc/0",
     ) == "https://skemman.is/oai/request?verb=ListRecords&resumptionToken=oai_dc%2F0"
+
+
+def test_oai_cache_path_uses_set_and_xml_extension():
+    assert oai_cache_path(
+        Path("cache"),
+        metadata_prefix="oai_dc",
+        set_spec="com_1946_2064",
+        offset=100,
+    ) == Path("cache/oai_dc_com_1946_2064_000100.xml")
+
+
+def test_oai_cache_path_sanitizes_set_name():
+    assert oai_cache_path(
+        Path("cache"),
+        metadata_prefix="oai dc",
+        set_spec="1946/2064",
+        offset=0,
+    ) == Path("cache/oai_dc_1946_2064_000000.xml")
 
 
 def test_parses_records_and_resumption_token():

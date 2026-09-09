@@ -8,7 +8,7 @@ Every fetch is cached, and the cache is the reason a re-run is cheap.
 
 | Path | What | Size |
 | --- | --- | --- |
-| `data/raw/oai/` | OAI-PMH listing XML, by request URL | one XML page per OAI-PMH page |
+| `data/raw/oai/` | OAI-PMH listing XML, by set and page offset | one XML page per OAI-PMH page |
 | `data/raw/items/<id>.html` | Skemman item page | ~30 KB each |
 | `data/raw/pdf_text/<id>.txt` | First pages of the PDF, as plain text | ~5 KB each |
 | `data/raw/pdfs/<id>.pdf` | Only with `--keep-pdf` | megabytes |
@@ -16,8 +16,9 @@ Every fetch is cached, and the cache is the reason a re-run is cheap.
 `<id>` is the Skemman handle suffix throughout, so `data/raw/pdf_text/25337.txt`,
 `data/raw/items/25337.html` and <https://skemman.is/handle/1946/25337> are the same thesis.
 
-OAI-PMH listing pages are cached by URL. Re-running the same `skemman oai-pmh` command
-reuses those XML pages rather than waiting through the request delay again.
+OAI-PMH listing pages use readable XML filenames such as
+`oai_dc_com_1946_2064_000000.xml`. Re-running the same `skemman oai-pmh` command reuses
+those XML pages rather than waiting through the request delay again.
 
 ## Why text and not the PDF
 
