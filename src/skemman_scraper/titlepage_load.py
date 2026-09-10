@@ -198,12 +198,31 @@ def parse_titlepage(text: str) -> dict[str, object]:
 
 
 def extract_text(pdf: Path, pages: int | None = PAGES) -> tuple[str, int]:
-    """Return the first pages as text, plus the document's total page count."""
+    """Return the first pages as text, plus the document's total page count.
+
+    A page pypdf cannot read is left empty rather than failing the document.
+    26756 and 34488 each carry one malformed font -- a CID width range that
+    runs backwards, "19..17" -- used on two pages well past the title page.
+    Reading them in one expression threw away the eighteen pages that read
+    perfectly, the title page among them, and retried the whole download on
+    every run. The empty page keeps its place, so page boundaries in the text
+    still line up with the document. Only a document where no page reads at
+    all is an error.
+    """
     reader = pypdf.PdfReader(str(pdf))
     total = len(reader.pages)
     page_count = total if pages is None else min(pages, total)
-    text = "\n".join((reader.pages[i].extract_text() or "") for i in range(page_count))
-    return text, total
+    parts: list[str] = []
+    failures: list[Exception] = []
+    for i in range(page_count):
+        try:
+            parts.append(reader.pages[i].extract_text() or "")
+        except Exception as exc:  # noqa: BLE001 - one bad font should not cost the document
+            failures.append(exc)
+            parts.append("")
+    if page_count and len(failures) == page_count:
+        raise failures[0]
+    return "\n".join(parts), total
 
 
 def _split_marker(raw: str) -> tuple[str, int | None, int | None]:

@@ -1,6 +1,7 @@
 """Index the file table Skemman shows on each item page."""
 
 from __future__ import annotations
+import requests
 
 import re
 from pathlib import Path
@@ -215,7 +216,14 @@ def load_file_index(
                 item_rows = con.execute(query).fetchall()
 
         for thesis_id, item_url in tqdm(item_rows, desc="Indexing files", unit="item"):
-            html = session.get_text(item_url, use_cache=False)
+            try:
+                html = session.get_text(item_url, use_cache=False)
+            except requests.RequestException as exc:
+                # A withdrawn item answers 404 at its handle while OAI-PMH still lists
+                # it -- 23865 did, and stopped the run 52 items into 256, leaving the
+                # rest unasked. Say so and move on; it is retried on the next run.
+                tqdm.write(f"skipped {thesis_id}: {exc}")
+                continue
             entries = classify_files(parse_file_table(html))
             con.execute("delete from thesis_file where thesis_id = ?", [thesis_id])
             con.execute("delete from thesis_file_index_status where thesis_id = ?", [thesis_id])
