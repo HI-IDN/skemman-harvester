@@ -5,10 +5,22 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [1.2.0] — 2026-09-10
+
+### Removed
+
+- **`simple-search` is gone.** It built URLs under `/simple-search`, which
+  [robots.txt](https://skemman.is/robots.txt) disallows.
+- The item-page scraper, `load_metadata()` and its `python -m` entry point. OAI-PMH
+  replaced it for the record and xoai for the files, and no `skemman` command called it.
 
 ### Added
 
+- **`oai-pmh`** harvests a collection over OAI-PMH at `/oai/request`, the interface a
+  DSpace repository publishes for reading records out of it, and not disallowed. Listing
+  pages are cached by metadata prefix, set and offset, and an interrupted harvest resumes
+  from its checkpoint. Subjects and abstracts are loaded from the records themselves.
+  Handles, years and the record limit are read from the config.
 - **`files-load`** fills `thesis_file` from the `xoai` metadata format. xoai is DSpace's
   own format and it lists every attached file with its name, size, MIME type, download URL
   and the bundle description DSpace filed it under, `COMPLETE_TEXT` or `DECLARATION` —
@@ -93,5 +105,6 @@ world's word for reading records out of one.
 - Renamed from `skemman-scraper` to `skemman-harvester`. The CLI command stays `skemman`.
 - Progress uses `tqdm` throughout, matching what `simple-search` already did.
 
+[1.2.0]: https://github.com/HI-IDN/skemman-harvester/releases/tag/v1.2.0
 [1.1.0]: https://github.com/HI-IDN/skemman-harvester/releases/tag/v1.1.0
 [1.0.0]: https://github.com/HI-IDN/skemman-harvester/releases/tag/v1.0.0
