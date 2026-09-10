@@ -217,6 +217,10 @@ def titlepage_load_cmd(
         include_closed: bool = typer.Option(
             False, "--include-closed", help="Also try files the item page marks closed."
         ),
+        cached_only: bool = typer.Option(
+            False, "--cached-only",
+            help="Re-parse every thesis with cached text; never download.",
+        ),
 ) -> None:
     """Read faculty, credits and degree off thesis title pages into DuckDB.
 
@@ -247,6 +251,7 @@ def titlepage_load_cmd(
         max_bytes=int(max_mb * 1024 * 1024) if max_mb else None,
         include_closed=include_closed,
         pages=pages,
+        cached_only=cached_only,
     )
     if processed:
         pct = 100.0 * with_faculty / processed

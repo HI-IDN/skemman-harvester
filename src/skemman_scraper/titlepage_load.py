@@ -292,6 +292,10 @@ def states_a_degree(text: str | None) -> bool:
     return bool(text and DEGREE_PATTERN.search(text))
 
 
+class _NotCached(Exception):
+    """No cached text for a thesis, and fetching is not allowed."""
+
+
 def _ensure_text(
     thesis_id: int,
     url: str,
@@ -300,6 +304,7 @@ def _ensure_text(
     session: PoliteSession,
     keep_pdf: bool,
     pages: int | None,
+    offline: bool = False,
 ) -> tuple[str | None, int | None, bool]:
     """Return the cached title-page text, page count, and whether it came from cache."""
     text_path = text_dir / f"{thesis_id}.txt"
@@ -309,8 +314,14 @@ def _ensure_text(
         )
         # A cache holding fewer pages than asked for is fetched again rather
         # than returned short: raising `titlepage_pages` has to take effect.
-        if not _is_stale(n_pages, kept, pages):
+        # Offline, a short cache is parsed as it is: re-deriving fields from
+        # what is on disk must never cost a request, even when it holds fewer
+        # pages than a fetch today would keep.
+        if offline or not _is_stale(n_pages, kept, pages):
             return text or None, n_pages, True
+
+    if offline:
+        raise _NotCached(thesis_id)
 
     pdf_path = pdf_dir / f"{thesis_id}.pdf"
     fetched_now = False
@@ -451,6 +462,7 @@ def load_titlepages(
     max_bytes: int | None = None,
     include_closed: bool = False,
     pages: int | None = None,
+    cached_only: bool = False,
 ) -> tuple[int, int, int]:
     """Load title-page fields for theses that do not have them yet.
 
@@ -474,7 +486,13 @@ def load_titlepages(
     with duckdb.connect(str(db)) as con:
         _create_table(con)
 
-        where = ["f.pdf_url is not null"]
+        where = [] if cached_only else ["f.pdf_url is not null"]
+        if cached_only:
+            # Re-derive from what is already on disk: every thesis with cached
+            # text, parsed or not, and nothing is fetched. This is what lets a
+            # parser change reach the whole population without a request.
+            cached = sorted(int(t.stem) for t in text_dir.glob("*.txt") if t.stem.isdigit())
+            where.append("m.thesis_id in (" + (",".join(map(str, cached)) or "null") + ")")
         params: list[object] = []
         if ids:
             wanted = [int(x) for x in ids.split(",") if x.strip()]
@@ -488,8 +506,9 @@ def load_titlepages(
             # the document itself states is what the analysis trusts anyway.
             where.append("(m.degree_level = ? or m.degree_level is null)")
             params.append(degree_level)
-            where.append("p.thesis_id is null")
-            if not retry_failed:
+            if not cached_only:
+                where.append("p.thesis_id is null")
+            if not retry_failed and not cached_only:
                 # A closed item will not open next time; do not spend a request on it.
                 where.append(
                     "m.thesis_id not in "
@@ -503,7 +522,7 @@ def load_titlepages(
         if max_bytes:
             where.append("coalesce(f.open_size, f.any_size, 0) <= ?")
             params.append(max_bytes)
-        if not include_closed:
+        if not include_closed and not cached_only:
             # A thesis with no indexed files is still worth trying; one whose
             # PDFs are all closed is not. Aggregating access with min() would
             # have excluded any thesis carrying a closed file alongside an open
@@ -577,8 +596,11 @@ def load_titlepages(
         for thesis_id, url in bar:
             try:
                 text, n_pages, cached = _ensure_text(
-                    thesis_id, url, text_dir, pdf_dir, session, keep_pdf, pages
+                    thesis_id, url, text_dir, pdf_dir, session, keep_pdf, pages,
+                    offline=cached_only,
                 )
+            except _NotCached:
+                continue
             except TitlepageError as exc:
                 failed += 1
                 _record_failure(con, log, thesis_id, url, exc.reason, exc.permanent)
