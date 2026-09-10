@@ -1,12 +1,12 @@
 """Index the file table Skemman shows on each item page."""
 
 from __future__ import annotations
-import requests
 
 import re
 from pathlib import Path
 
 import duckdb
+import requests
 from bs4 import BeautifulSoup
 from tqdm import tqdm
 
